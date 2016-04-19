@@ -1,0 +1,3 @@
+uvloop
+curio
+aiohttp
