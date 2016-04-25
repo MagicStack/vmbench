@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+
+
+import os.path
+import socket
+import subprocess
+import sys
+import time
+
+
+_dir = os.path.dirname(__file__)
+
+_cache = os.path.abspath(os.path.join(_dir, '.cache'))
+
+http_client = "wrk --latency -d 30 -c 200 -t 4 http://127.0.0.1:25000/{msize}"
+tcp_client = "./tcp_client --addr=127.0.0.1:25000 --workers=4 --msize={msize}"
+
+http_server = "uvloop/examples/bench/http_server.py --addr='0.0.0.0:25000'"
+
+server_base = ['docker', 'run', '--rm', '-t', '-p', '25000:25000',
+               '-v', '{_cache}:/var/lib/cache'.format(_cache=_cache),
+               '--name', 'magicbench', 'magic/benchmark']
+
+benchmarks = [{
+    'title': 'TCP echo server (asyncio)',
+    'server': ['uvloop/examples/bench/server.py', '--addr=0.0.0.0:25000',
+               '--streams'],
+    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--workers=4'],
+    'warmup': ['--msize=1024', '--workers=4', '--duration=5'],
+
+    'variations': [{
+        'title': '1kb messages, concurrency 4',
+        'args': ['--msize=1024', '--workers=4', '--duration=30']
+    }, {
+        'title': '10kb messages, concurrency 4',
+        'args': ['--msize=10240', '--workers=4', '--duration=30']
+    }, {
+        'title': '100kb messages, concurrency 4',
+        'args': ['--msize=102400', '--workers=4', '--duration=30']
+    }]
+}, {
+    'title': 'TCP echo server (uvloop)',
+    'server': ['uvloop/examples/bench/server.py', '--addr=0.0.0.0:25000',
+               '--streams', '--uvloop'],
+    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--workers=4'],
+    'warmup': ['--msize=1024', '--workers=4', '--duration=5'],
+
+    'variations': [{
+        'title': '1kb messages, concurrency 4',
+        'args': ['--msize=1024', '--workers=4', '--duration=30']
+    }, {
+        'title': '10kb messages, concurrency 4',
+        'args': ['--msize=10240', '--workers=4', '--duration=30']
+    }, {
+        'title': '100kb messages, concurrency 4',
+        'args': ['--msize=102400', '--workers=4', '--duration=30']
+    }]
+}]
+
+
+def abort(msg):
+    print(msg, file=sys.stdout)
+    sys.exit(1)
+
+
+def start_and_wait_for_server(server_cmd, timeout=10):
+    server = subprocess.Popen(server_cmd, universal_newlines=True,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    start = time.monotonic()
+
+    while time.monotonic() - start < timeout:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(time.monotonic() - start)
+        try:
+            sock.connect(('127.0.0.1', 25000))
+            sock.sendall(b'ping')
+            if sock.recv(4):
+                print('Server is up and running.')
+            else:
+                raise IOError('socket read')
+        except IOError:
+            if server.returncode is not None:
+                abort('Could not start server\n' +
+                      '----------------------\n' +
+                      server.communicate()[1])
+        else:
+            sock.close()
+            return server
+
+    kill_server(server)
+
+    abort('Could not start server\n' +
+          '----------------------\n' +
+          server.communicate()[1])
+
+
+def kill_server(server):
+    if server.returncode is None:
+        print('Shutting down server...')
+        subprocess.check_output(['docker', 'stop', 'magicbench'])
+        server.wait()
+
+
+def main():
+    for benchmark in benchmarks:
+        print(benchmark['title'])
+        print('=' * len(benchmark['title']))
+        print()
+
+        print('Starting server...')
+        server_cmd = server_base + benchmark['server']
+        print('  ' + ' '.join(server_cmd))
+        server = start_and_wait_for_server(server_cmd)
+        print()
+
+        print('Warming up server...')
+        warmup_cmd = benchmark['client'] + benchmark['warmup']
+        print(' '.join(warmup_cmd))
+        subprocess.check_output(warmup_cmd)
+
+        try:
+            for variation in benchmark['variations']:
+                print(variation['title'])
+                print('-' * len(variation['title']))
+                client_cmd = benchmark['client'] + variation['args']
+                print(' '.join(client_cmd))
+                subprocess.check_call(client_cmd)
+                print()
+        finally:
+            kill_server(server)
+
+        print()
+
+
+if __name__ == '__main__':
+    main()

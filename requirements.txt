@@ -1,3 +1,4 @@
 uvloop
 curio
 aiohttp
+httptools

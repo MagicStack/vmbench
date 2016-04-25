@@ -56,7 +56,7 @@ if __name__ == '__main__':
         if loop_type not in {'asyncio', 'uvloop'}:
             abort('unrecognized loop type: {}'.format(loop_type))
 
-        if server_type not in {'aiohttp'}:
+        if server_type not in {'aiohttp', 'httptools'}:
             abort('unrecognized server type: {}'.format(server_type))
 
         if loop_type:

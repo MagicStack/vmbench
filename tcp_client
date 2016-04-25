@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+#
+# Copied with minimal modifications from curio
+# https://github.com/dabeaz/curio
+
+from concurrent import futures
+
+import argparse
+import socket
+import time
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--msize', default=1000, type=int,
+                        help='message size in bytes')
+    parser.add_argument('--duration', '-T', default=30, type=int,
+                        help='duration of test in seconds')
+    parser.add_argument('--times', default=1, type=int,
+                        help='number of times to run the test')
+    parser.add_argument('--workers', default=3, type=int,
+                        help='number of workers')
+    parser.add_argument('--addr', default='127.0.0.1:25000', type=str,
+                        help='number of workers')
+    args = parser.parse_args()
+
+    unix = False
+    if args.addr.startswith('file:'):
+        unix = True
+        addr = args.addr[5:]
+    else:
+        addr = args.addr.split(':')
+        addr[1] = int(addr[1])
+        addr = tuple(addr)
+
+    MSGSIZE = args.msize
+
+    msg = b'x' * MSGSIZE
+
+    def run_test(start, duration):
+        if unix:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        else:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect(addr)
+
+        n = 0
+
+        while time.monotonic() - start < duration:
+            sock.sendall(msg)
+            nrecv = 0
+            while nrecv < MSGSIZE:
+                resp = sock.recv(MSGSIZE)
+                if not resp:
+                    raise SystemExit()
+                nrecv += len(resp)
+            n += 1
+
+        return n
+
+    TIMES = args.times
+    N = args.workers
+    DURATION = args.duration
+
+    messages = 0
+    start = time.monotonic()
+    for _ in range(TIMES):
+        with futures.ProcessPoolExecutor(max_workers=N) as e:
+            fs = []
+            for _ in range(N):
+                fs.append(e.submit(run_test, start, DURATION))
+
+            res = futures.wait(fs)
+            for fut in res.done:
+                messages += fut.result()
+
+    end = time.monotonic()
+    duration = end - start
+
+    print(messages, 'in', round(duration, 2))
+    print(round(messages / duration, 2), 'requests/sec')
+    throughput = (messages * MSGSIZE / (1024 * 1024)) / duration
+    print(round(throughput, 2), 'MiB/sec')
