@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 
+import argparse
+import multiprocessing
 import os.path
 import socket
 import subprocess
@@ -13,7 +15,6 @@ _dir = os.path.dirname(__file__)
 _cache = os.path.abspath(os.path.join(_dir, '.cache'))
 
 http_client = "wrk --latency -d 30 -c 200 -t 4 http://127.0.0.1:25000/{msize}"
-tcp_client = "./tcp_client --addr=127.0.0.1:25000 --workers=4 --msize={msize}"
 
 http_server = "uvloop/examples/bench/http_server.py --addr='0.0.0.0:25000'"
 
@@ -21,39 +22,76 @@ server_base = ['docker', 'run', '--rm', '-t', '-p', '25000:25000',
                '-v', '{_cache}:/var/lib/cache'.format(_cache=_cache),
                '--name', 'magicbench', 'magic/benchmark']
 
+python = ['vex', 'bench', 'python']
+nodejs = ['nodejs']
+
 benchmarks = [{
     'title': 'TCP echo server (asyncio)',
-    'server': ['uvloop/examples/bench/server.py', '--addr=0.0.0.0:25000',
-               '--streams'],
-    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--workers=4'],
-    'warmup': ['--msize=1024', '--workers=4', '--duration=5'],
+    'server': python + ['uvloop/examples/bench/server.py',
+                        '--addr=0.0.0.0:25000',
+                        '--streams'],
+    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--concurrency=4'],
+    'warmup': ['--msize=1024', '--concurrency=4', '--duration=5'],
 
     'variations': [{
         'title': '1kb messages, concurrency 4',
-        'args': ['--msize=1024', '--workers=4', '--duration=30']
+        'args': ['--msize=1024', '--concurrency=4']
     }, {
         'title': '10kb messages, concurrency 4',
-        'args': ['--msize=10240', '--workers=4', '--duration=30']
+        'args': ['--msize=10240', '--concurrency=4']
     }, {
         'title': '100kb messages, concurrency 4',
-        'args': ['--msize=102400', '--workers=4', '--duration=30']
+        'args': ['--msize=102400', '--concurrency=4']
+    }]
+}, {
+    'title': 'TCP echo server (gevent)',
+    'server': python + ['curio/examples/bench/gevecho.py'],
+    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--concurrency=4'],
+    'warmup': ['--msize=1024', '--concurrency=4', '--duration=5'],
+
+    'variations': [{
+        'title': '1kb messages, concurrency 4',
+        'args': ['--msize=1024', '--concurrency=4']
+    }, {
+        'title': '10kb messages, concurrency 4',
+        'args': ['--msize=10240', '--concurrency=4']
+    }, {
+        'title': '100kb messages, concurrency 4',
+        'args': ['--msize=102400', '--concurrency=4']
+    }]
+}, {
+    'title': 'TCP echo server (nodejs)',
+    'server': nodejs + ['curio/examples/bench/nodeecho.js'],
+    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--concurrency=4'],
+    'warmup': ['--msize=1024', '--concurrency=4', '--duration=5'],
+
+    'variations': [{
+        'title': '1kb messages, concurrency 4',
+        'args': ['--msize=1024', '--concurrency=4']
+    }, {
+        'title': '10kb messages, concurrency 4',
+        'args': ['--msize=10240', '--concurrency=4']
+    }, {
+        'title': '100kb messages, concurrency 4',
+        'args': ['--msize=102400', '--concurrency=4']
     }]
 }, {
     'title': 'TCP echo server (uvloop)',
-    'server': ['uvloop/examples/bench/server.py', '--addr=0.0.0.0:25000',
-               '--streams', '--uvloop'],
-    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--workers=4'],
-    'warmup': ['--msize=1024', '--workers=4', '--duration=5'],
+    'server': python + ['uvloop/examples/bench/server.py',
+                        '--addr=0.0.0.0:25000',
+                        '--streams', '--uvloop'],
+    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--concurrency=4'],
+    'warmup': ['--msize=1024', '--concurrency=4', '--duration=5'],
 
     'variations': [{
         'title': '1kb messages, concurrency 4',
-        'args': ['--msize=1024', '--workers=4', '--duration=30']
+        'args': ['--msize=1024', '--concurrency=4']
     }, {
         'title': '10kb messages, concurrency 4',
-        'args': ['--msize=10240', '--workers=4', '--duration=30']
+        'args': ['--msize=10240', '--concurrency=4']
     }, {
         'title': '100kb messages, concurrency 4',
-        'args': ['--msize=102400', '--workers=4', '--duration=30']
+        'args': ['--msize=102400', '--concurrency=4']
     }]
 }]
 
@@ -63,7 +101,7 @@ def abort(msg):
     sys.exit(1)
 
 
-def start_and_wait_for_server(server_cmd, timeout=10):
+def start_and_wait_for_server(server_cmd, timeout=60):
     server = subprocess.Popen(server_cmd, universal_newlines=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -83,7 +121,7 @@ def start_and_wait_for_server(server_cmd, timeout=10):
             if server.returncode is not None:
                 abort('Could not start server\n' +
                       '----------------------\n' +
-                      server.communicate()[1])
+                      '\n\n'.join(server.communicate()))
         else:
             sock.close()
             return server
@@ -92,7 +130,7 @@ def start_and_wait_for_server(server_cmd, timeout=10):
 
     abort('Could not start server\n' +
           '----------------------\n' +
-          server.communicate()[1])
+          '\n\n'.join(server.communicate()))
 
 
 def kill_server(server):
@@ -100,9 +138,20 @@ def kill_server(server):
         print('Shutting down server...')
         subprocess.check_output(['docker', 'stop', 'magicbench'])
         server.wait()
+        ret = subprocess.call(['docker', 'inspect', '--type=container',
+                               'magicbench'],
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+        if ret == 0:
+            subprocess.check_output(['docker', 'rm', 'magicbench'])
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--duration', '-T', default=30, type=int,
+                        help='duration of each benchmark in seconds')
+    args = parser.parse_args()
+
     for benchmark in benchmarks:
         print(benchmark['title'])
         print('=' * len(benchmark['title']))
@@ -118,12 +167,17 @@ def main():
         warmup_cmd = benchmark['client'] + benchmark['warmup']
         print(' '.join(warmup_cmd))
         subprocess.check_output(warmup_cmd)
+        print()
+
+        duration = args.duration
 
         try:
             for variation in benchmark['variations']:
-                print(variation['title'])
-                print('-' * len(variation['title']))
+                title = 'BENCHMARK: {}'.format(variation['title'])
+                print(title)
+                print('-' * len(title))
                 client_cmd = benchmark['client'] + variation['args']
+                client_cmd += ['--duration={}'.format(duration)]
                 print(' '.join(client_cmd))
                 subprocess.check_call(client_cmd)
                 print()

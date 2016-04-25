@@ -11,9 +11,9 @@ ENV WORKON_HOME /usr/local/python-venvs
 RUN mkdir -p /usr/local/python-venvs
 
 RUN DEBIAN_FRONTEND=noninteractive \
-        apt-get install -y \
+        apt-get update && apt-get install -y \
             autoconf automake libtool build-essential \
-            python3 python3-pip git
+            python3 python3-pip git nodejs
 
 RUN pip3 install vex
 RUN vex --python=python3.5 -m bench pip install -U pip

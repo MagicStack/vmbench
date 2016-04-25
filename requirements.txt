@@ -2,3 +2,5 @@ uvloop
 curio
 aiohttp
 httptools
+gevent
+tornado

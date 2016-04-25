@@ -11,4 +11,4 @@ git clone https://github.com/MagicStack/uvloop.git
 cp /tmp/http_server.py uvloop/examples/bench/
 
 echo "Running server on port 25000..."
-vex bench python "$@"
+"$@"
