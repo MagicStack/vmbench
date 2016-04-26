@@ -96,7 +96,8 @@ if __name__ == '__main__':
                      'quantiles should be in [0, 1]'
 
         weighted_quantiles = np.cumsum(weights) - 0.5 * weights
-        weighted_quantiles /= np.sum(weights)
+        weighted_quantiles -= weighted_quantiles[0]
+        weighted_quantiles /= weighted_quantiles[-1]
 
         return np.interp(quantiles, weighted_quantiles, values)
 
@@ -142,7 +143,7 @@ if __name__ == '__main__':
     latency_std = math.sqrt(variance)
     latency_cv = latency_std / mean_latency
 
-    percentiles = [50, 75, 90, 99]
+    percentiles = [25, 50, 75, 90, 99]
     percentile_data = []
 
     quantiles = weighted_quantile(arange, [p / 100 for p in percentiles],
