@@ -10,5 +10,7 @@ git clone https://github.com/dabeaz/curio.git
 git clone https://github.com/MagicStack/uvloop.git
 cp /tmp/http_server.py uvloop/examples/bench/
 
-echo "Running server on port 25000..."
-"$@"
+UID=${UID:-0}
+GID=${GID:-0}
+
+gosu ${UID}:${GID} "$@"

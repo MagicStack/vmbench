@@ -2,97 +2,170 @@
 
 
 import argparse
-import multiprocessing
+import json
+import os
 import os.path
 import socket
 import subprocess
 import sys
+import textwrap
 import time
 
 
 _dir = os.path.dirname(__file__)
 
 _cache = os.path.abspath(os.path.join(_dir, '.cache'))
+_socket = os.path.abspath(os.path.join(_dir, 'sockets'))
 
 http_client = "wrk --latency -d 30 -c 200 -t 4 http://127.0.0.1:25000/{msize}"
 
 http_server = "uvloop/examples/bench/http_server.py --addr='0.0.0.0:25000'"
 
 server_base = ['docker', 'run', '--rm', '-t', '-p', '25000:25000',
+               '-e', 'UID={}'.format(os.geteuid()),
+               '-e', 'GID={}'.format(os.getegid()),
                '-v', '{_cache}:/var/lib/cache'.format(_cache=_cache),
+               '-v', '{_socket}:/tmp/sockets'.format(_socket=_socket),
                '--name', 'magicbench', 'magic/benchmark']
 
 python = ['vex', 'bench', 'python']
 nodejs = ['nodejs']
 
+echo_variations = [{
+    'name': '1kb',
+    'title': '1kb messages, concurrency 4',
+    'args': ['--msize=1024', '--concurrency=4']
+}, {
+    'name': '10kb',
+    'title': '10kb messages, concurrency 4',
+    'args': ['--msize=10240', '--concurrency=4']
+}, {
+    'name': '100kb',
+    'title': '100kb messages, concurrency 4',
+    'args': ['--msize=102400', '--concurrency=4']
+}]
+
+echo_client = ['./echo_client', '--concurrency=4', '--output-format=json']
+echo_warmup = ['--msize=1024', '--concurrency=4', '--duration=5']
+
+tcp_address = '127.0.0.1:25000'
+unix_address = 'file:{_socket}/server.sock'.format(_socket=_socket)
+
+tcp_client = echo_client + ['--addr={}'.format(tcp_address)]
+unix_client = echo_client + ['--addr={}'.format(unix_address)]
+
 benchmarks = [{
-    'title': 'TCP echo server (asyncio)',
+    'name': 'tcpecho-gevent',
+    'title': 'TCP echo server (gevent)',
+    'server': python + ['curio/examples/bench/gevecho.py'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
+}, {
+    'name': 'tcpecho-tornado',
+    'title': 'TCP echo server (tornado)',
+    'server': python + ['/tmp/torecho.py'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
+}, {
+    'name': 'tcpecho-curio',
+    'title': 'TCP echo server (curio)',
+    'server': python + ['curio/examples/bench/curioecho.py'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
+}, {
+    'name': 'tcpecho-nodejs',
+    'title': 'TCP echo server (nodejs)',
+    'server': nodejs + ['curio/examples/bench/nodeecho.js'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
+}, {
+    'name': 'tcpecho-asyncio-stdstreams',
+    'title': 'TCP echo server (asyncio/stdstreams)',
     'server': python + ['uvloop/examples/bench/server.py',
                         '--addr=0.0.0.0:25000',
                         '--streams'],
-    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--concurrency=4'],
-    'warmup': ['--msize=1024', '--concurrency=4', '--duration=5'],
-
-    'variations': [{
-        'title': '1kb messages, concurrency 4',
-        'args': ['--msize=1024', '--concurrency=4']
-    }, {
-        'title': '10kb messages, concurrency 4',
-        'args': ['--msize=10240', '--concurrency=4']
-    }, {
-        'title': '100kb messages, concurrency 4',
-        'args': ['--msize=102400', '--concurrency=4']
-    }]
+    'server_address': tcp_address,
+    'client': tcp_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
 }, {
-    'title': 'TCP echo server (gevent)',
-    'server': python + ['curio/examples/bench/gevecho.py'],
-    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--concurrency=4'],
-    'warmup': ['--msize=1024', '--concurrency=4', '--duration=5'],
-
-    'variations': [{
-        'title': '1kb messages, concurrency 4',
-        'args': ['--msize=1024', '--concurrency=4']
-    }, {
-        'title': '10kb messages, concurrency 4',
-        'args': ['--msize=10240', '--concurrency=4']
-    }, {
-        'title': '100kb messages, concurrency 4',
-        'args': ['--msize=102400', '--concurrency=4']
-    }]
+    'name': 'tcpecho-asyncio-minproto',
+    'title': 'TCP echo server (asyncio/minproto)',
+    'server': python + ['uvloop/examples/bench/server.py',
+                        '--addr=0.0.0.0:25000',
+                        '--proto'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
 }, {
-    'title': 'TCP echo server (nodejs)',
-    'server': nodejs + ['curio/examples/bench/nodeecho.js'],
-    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--concurrency=4'],
-    'warmup': ['--msize=1024', '--concurrency=4', '--duration=5'],
-
-    'variations': [{
-        'title': '1kb messages, concurrency 4',
-        'args': ['--msize=1024', '--concurrency=4']
-    }, {
-        'title': '10kb messages, concurrency 4',
-        'args': ['--msize=10240', '--concurrency=4']
-    }, {
-        'title': '100kb messages, concurrency 4',
-        'args': ['--msize=102400', '--concurrency=4']
-    }]
+    'name': 'unixecho-asyncio-stdstreams',
+    'title': 'Unix socket echo server (asyncio/stdstreams)',
+    'server': python + ['uvloop/examples/bench/server.py',
+                        '--addr=file:/tmp/sockets/server.sock',
+                        '--streams'],
+    'server_address': unix_address,
+    'client': unix_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
 }, {
-    'title': 'TCP echo server (uvloop)',
+    'name': 'unixecho-asyncio-minproto',
+    'title': 'Unix socket echo server (asyncio/minproto)',
+    'server': python + ['uvloop/examples/bench/server.py',
+                        '--addr=file:/tmp/sockets/server.sock',
+                        '--proto'],
+    'server_address': unix_address,
+    'client': unix_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
+}, {
+    'name': 'tcpecho-uvloop-stdstreams',
+    'title': 'TCP echo server (uvloop/stdstreams)',
     'server': python + ['uvloop/examples/bench/server.py',
                         '--addr=0.0.0.0:25000',
                         '--streams', '--uvloop'],
-    'client': ['./tcp_client', '--addr=127.0.0.1:25000', '--concurrency=4'],
-    'warmup': ['--msize=1024', '--concurrency=4', '--duration=5'],
-
-    'variations': [{
-        'title': '1kb messages, concurrency 4',
-        'args': ['--msize=1024', '--concurrency=4']
-    }, {
-        'title': '10kb messages, concurrency 4',
-        'args': ['--msize=10240', '--concurrency=4']
-    }, {
-        'title': '100kb messages, concurrency 4',
-        'args': ['--msize=102400', '--concurrency=4']
-    }]
+    'server_address': tcp_address,
+    'client': tcp_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
+}, {
+    'name': 'tcpecho-uvloop-minproto',
+    'title': 'TCP echo server (uvloop/minproto)',
+    'server': python + ['uvloop/examples/bench/server.py',
+                        '--addr=0.0.0.0:25000',
+                        '--proto', '--uvloop'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
+}, {
+    'name': 'unixecho-uvloop-stdstreams',
+    'title': 'Unix socket echo server (uvloop/stdstreams)',
+    'server': python + ['uvloop/examples/bench/server.py',
+                        '--addr=file:/tmp/sockets/server.sock',
+                        '--streams', '--uvloop'],
+    'server_address': unix_address,
+    'client': unix_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
+}, {
+    'name': 'unixecho-uvloop-minproto',
+    'title': 'Unix socket echo server (uvloop/minproto)',
+    'server': python + ['uvloop/examples/bench/server.py',
+                        '--addr=file:/tmp/sockets/server.sock',
+                        '--proto', '--uvloop'],
+    'server_address': unix_address,
+    'client': unix_client,
+    'warmup': echo_warmup,
+    'variations': echo_variations,
 }]
 
 
@@ -101,17 +174,30 @@ def abort(msg):
     sys.exit(1)
 
 
-def start_and_wait_for_server(server_cmd, timeout=60):
+def start_and_wait_for_server(server_cmd, address, timeout=60):
+    kill_server()
+
     server = subprocess.Popen(server_cmd, universal_newlines=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     start = time.monotonic()
 
+    if address.startswith('file:'):
+        family = socket.AF_UNIX
+        addr = address[5:]
+    else:
+        family = socket.AF_INET
+        addr = address.split(':')
+        addr[1] = int(addr[1])
+        addr = tuple(addr)
+
+    print('Trying to connect to server at address {}'.format(address))
+
     while time.monotonic() - start < timeout:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock = socket.socket(family, socket.SOCK_STREAM)
         sock.settimeout(time.monotonic() - start)
         try:
-            sock.connect(('127.0.0.1', 25000))
+            sock.connect(addr)
             sock.sendall(b'ping')
             if sock.recv(4):
                 print('Server is up and running.')
@@ -126,33 +212,70 @@ def start_and_wait_for_server(server_cmd, timeout=60):
             sock.close()
             return server
 
-    kill_server(server)
+    kill_server()
 
     abort('Could not start server\n' +
           '----------------------\n' +
           '\n\n'.join(server.communicate()))
 
 
-def kill_server(server):
-    if server.returncode is None:
+def server_is_running():
+    try:
+        ret = subprocess.check_output(
+                ['docker', 'inspect', '--type=container',
+                 '--format="{{ .State.Running }}"', 'magicbench'],
+                stderr=subprocess.DEVNULL,
+                universal_newlines=True)
+
+    except subprocess.CalledProcessError:
+        return False
+
+    else:
+        return ret == 'true\n'
+
+
+def server_container_exists():
+    ret = subprocess.call(['docker', 'inspect', '--type=container',
+                           'magicbench'],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+    return ret == 0
+
+
+def kill_server():
+    if server_is_running():
         print('Shutting down server...')
         subprocess.check_output(['docker', 'stop', 'magicbench'])
-        server.wait()
-        ret = subprocess.call(['docker', 'inspect', '--type=container',
-                               'magicbench'],
-                               stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL)
-        if ret == 0:
-            subprocess.check_output(['docker', 'rm', 'magicbench'])
+
+    if server_container_exists():
+        print('Removing server container...')
+        subprocess.check_output(['docker', 'rm', 'magicbench'])
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--duration', '-T', default=30, type=int,
+    parser.add_argument('--duration', '-D', default=30, type=int,
                         help='duration of each benchmark in seconds')
+    parser.add_argument('--benchmarks', type=str,
+                        help='comma-separated list of benchmarks to run')
+    parser.add_argument('--save-json', '-J', default='text', type=str,
+                        help='path to save benchmark results in JSON format')
     args = parser.parse_args()
 
+    if not os.path.exists(_socket):
+        os.mkdir(_socket)
+
+    if args.benchmarks:
+        benchmarks_to_run = args.benchmarks.split(',')
+    else:
+        benchmarks_to_run = {b['name'] for b in benchmarks}
+
+    benchmarks_data = []
+
     for benchmark in benchmarks:
+        if benchmark['name'] not in benchmarks_to_run:
+            continue
+
         print(benchmark['title'])
         print('=' * len(benchmark['title']))
         print()
@@ -160,7 +283,7 @@ def main():
         print('Starting server...')
         server_cmd = server_base + benchmark['server']
         print('  ' + ' '.join(server_cmd))
-        server = start_and_wait_for_server(server_cmd)
+        start_and_wait_for_server(server_cmd, benchmark['server_address'])
         print()
 
         print('Warming up server...')
@@ -171,6 +294,13 @@ def main():
 
         duration = args.duration
 
+        benchmark_data = {
+            'name': benchmark['name'],
+            'variations': []
+        }
+
+        benchmarks_data.append(benchmark_data)
+
         try:
             for variation in benchmark['variations']:
                 title = 'BENCHMARK: {}'.format(variation['title'])
@@ -179,12 +309,37 @@ def main():
                 client_cmd = benchmark['client'] + variation['args']
                 client_cmd += ['--duration={}'.format(duration)]
                 print(' '.join(client_cmd))
-                subprocess.check_call(client_cmd)
-                print()
+                output = subprocess.check_output(
+                            client_cmd, universal_newlines=True)
+                data = json.loads(output)
+
+                format_data = data.copy()
+
+                format_data['latency_percentiles'] = '; '.join(
+                    '{}% under {}ms'.format(*v)
+                    for v in data['latency_percentiles'])
+
+                output = textwrap.dedent('''\
+                {messages} messages in {duration} seconds
+                Latency: min {latency_min}ms; max {latency_max}ms; mean {latency_mean}ms; std: {latency_std}ms ({latency_cv}%)
+                Latency distribtion: {latency_percentiles}
+                Requests/sec: {rps}
+                Transfer/sec: {transfer}MiB
+                ''').format(duration=duration, **format_data)
+
+                print(output)
+
+                data['name'] = variation['name']
+
+                benchmark_data['variations'].append(data)
         finally:
-            kill_server(server)
+            kill_server()
 
         print()
+
+    if args.save_json:
+        with open(args.save_json, 'w') as f:
+            json.dump(benchmarks_data, f)
 
 
 if __name__ == '__main__':

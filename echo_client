@@ -6,6 +6,8 @@
 
 import argparse
 from concurrent import futures
+import json
+import math
 import socket
 import time
 
@@ -26,6 +28,8 @@ if __name__ == '__main__':
                         help='socket timeout in seconds')
     parser.add_argument('--addr', default='127.0.0.1:25000', type=str,
                         help='server address')
+    parser.add_argument('--output-format', default='text', type=str,
+                        help='output format', choices=['text', 'json'])
     args = parser.parse_args()
 
     unix = False
@@ -49,11 +53,13 @@ if __name__ == '__main__':
         else:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        sock.settimeout(5)
+        sock.settimeout(15)
         sock.connect(addr)
 
         n = 0
-        latency_stats = np.zeros((timeout * 10,))
+        latency_stats = np.zeros((timeout * 100,))
+        min_latency = float('inf')
+        max_latency = 0.0
 
         while time.monotonic() - start < duration:
             req_start = time.monotonic()
@@ -64,49 +70,42 @@ if __name__ == '__main__':
                 if not resp:
                     raise SystemExit()
                 nrecv += len(resp)
-            req_time = round((time.monotonic() - req_start) * 10000)
+            req_time = round((time.monotonic() - req_start) * 100000)
+            if req_time > max_latency:
+                max_latency = req_time
+            if req_time < min_latency:
+                min_latency = req_time
             latency_stats[req_time] += 1
             n += 1
 
-        return n, latency_stats
+        return n, latency_stats, min_latency, max_latency
 
-    def weighted_quantile(values, quantiles, sample_weight=None,
-                          values_sorted=False, old_style=False):
+    def weighted_quantile(values, quantiles, weights):
         """ Very close to np.percentile, but supports weights.
-        NOTE: quantiles should be in [0, 1]!
+
         :param values: np.array with data
-        :param quantiles: array-like with many quantiles needed
-        :param sample_weight: array-like of the same length as `array`
-        :param values_sorted: bool, if True, then will avoid sorting of initial array
-        :param old_style: if True, will correct output to be consistent with np.percentile.
+        :param quantiles: array-like with many quantiles needed,
+               quantiles should be in [0, 1]!
+        :param weights: array-like of the same length as `array`
         :return: np.array with computed quantiles.
         """
         values = np.array(values)
         quantiles = np.array(quantiles)
-        if sample_weight is None:
-            sample_weight = np.ones(len(values))
-        sample_weight = np.array(sample_weight)
+        weights = np.array(weights)
         assert np.all(quantiles >= 0) and np.all(quantiles <= 1), \
                      'quantiles should be in [0, 1]'
 
-        if not values_sorted:
-            sorter = np.argsort(values)
-            values = values[sorter]
-            sample_weight = sample_weight[sorter]
+        weighted_quantiles = np.cumsum(weights) - 0.5 * weights
+        weighted_quantiles /= np.sum(weights)
 
-        weighted_quantiles = np.cumsum(sample_weight) - 0.5 * sample_weight
-        if old_style:
-            # To be convenient with np.percentile
-            weighted_quantiles -= weighted_quantiles[0]
-            weighted_quantiles /= weighted_quantiles[-1]
-        else:
-            weighted_quantiles /= np.sum(sample_weight)
         return np.interp(quantiles, weighted_quantiles, values)
 
     TIMES = args.times
     N = args.concurrency
     DURATION = args.duration
 
+    min_latency = float('inf')
+    max_latency = 0.0
     messages = 0
     latency_stats = None
     start = time.monotonic()
@@ -118,35 +117,78 @@ if __name__ == '__main__':
 
             res = futures.wait(fs)
             for fut in res.done:
-                t_messages, t_latency_stats = fut.result()
+                t_messages, t_latency_stats, t_min_latency, t_max_latency = \
+                    fut.result()
                 messages += t_messages
                 if latency_stats is None:
                     latency_stats = t_latency_stats
                 else:
                     latency_stats = np.add(latency_stats, t_latency_stats)
+                if t_max_latency > max_latency:
+                    max_latency = t_max_latency
+                if t_min_latency < min_latency:
+                    min_latency = t_min_latency
 
     end = time.monotonic()
-    duration = end - start
 
     arange = np.arange(len(latency_stats))
 
+    stddev = np.std(arange)
+
     weighted_latency = np.multiply(latency_stats, arange)
-    mean_latency = np.sum(weighted_latency) / messages
+
+    mean_latency = np.average(arange, weights=latency_stats)
+    variance = np.average((arange - mean_latency) ** 2, weights=latency_stats)
+    latency_std = math.sqrt(variance)
+    latency_cv = latency_std / mean_latency
 
     percentiles = [50, 75, 90, 99]
     percentile_data = []
 
     quantiles = weighted_quantile(arange, [p / 100 for p in percentiles],
-                                  sample_weight=latency_stats,
-                                  values_sorted=True)
+                                  weights=latency_stats)
 
     for i, percentile in enumerate(percentiles):
-        percentile_data.append('{}%: {}ms'.format(
-            percentile, round(quantiles[i], 2)))
+        percentile_data.append((percentile, round(quantiles[i] / 100, 3)))
 
-    print(messages, 'in', round(duration, 2))
-    print('Latency avg: {}ms'.format(round(mean_latency, 2)))
-    print('Latency distribution: {}'.format('; '.join(percentile_data)))
-    print('Requests/sec: {}'.format(round(messages / duration, 2)))
-    transfer = (messages * MSGSIZE / (1024 * 1024)) / duration
-    print('Transfer/sec: {}MiB'.format(round(transfer, 2)))
+    data = dict(
+        messages=messages,
+        transfer=round((messages * MSGSIZE / (1024 * 1024)) / DURATION, 2),
+        rps=round(messages / DURATION, 2),
+        latency_min=round(min_latency / 100, 3),
+        latency_mean=round(mean_latency / 100, 3),
+        latency_max=round(max_latency / 100, 3),
+        latency_std=round(latency_std / 100, 3),
+        latency_cv=round(latency_cv * 100, 2),
+        latency_percentiles=percentile_data
+    )
+
+    if args.output_format == 'json':
+        data['latency_percentiles'] = json.dumps(percentile_data)
+
+        output = '''\
+{{
+    "messages": {messages},
+    "transfer": {transfer},
+    "rps": {rps},
+    "latency_min": {latency_min},
+    "latency_mean": {latency_mean},
+    "latency_max": {latency_max},
+    "latency_std": {latency_std},
+    "latency_cv": {latency_cv},
+    "latency_percentiles": {latency_percentiles}
+}}'''.format(**data)
+    else:
+        data['latency_percentiles'] = '; '.join(
+            '{}% under {}ms'.format(*v) for v in percentile_data)
+
+        output = '''\
+{messages} {size}KiB messages in {duration} seconds
+Latency: min {latency_min}ms; max {latency_max}ms; mean {latency_mean}ms; \
+std: {latency_std}ms ({latency_cv}%)
+Latency distribtion: {latency_percentiles}
+Requests/sec: {rps}
+Transfer/sec: {transfer}MiB
+'''.format(duration=DURATION, size=round(MSGSIZE / 1024, 2), **data)
+
+    print(output)
