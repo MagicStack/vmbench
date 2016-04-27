@@ -42,8 +42,6 @@ if __name__ == '__main__':
                         help='message size in bytes')
     parser.add_argument('--duration', '-T', default=30, type=int,
                         help='duration of test in seconds')
-    parser.add_argument('--times', default=1, type=int,
-                        help='number of times to run the test')
     parser.add_argument('--concurrency', default=3, type=int,
                         help='request concurrency')
     parser.add_argument('--timeout', default=2, type=int,
@@ -75,7 +73,7 @@ if __name__ == '__main__':
         else:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        sock.settimeout(15)
+        sock.settimeout(timeout / 1000)
         sock.connect(addr)
 
         n = 0
@@ -102,7 +100,6 @@ if __name__ == '__main__':
 
         return n, latency_stats, min_latency, max_latency
 
-    TIMES = args.times
     N = args.concurrency
     DURATION = args.duration
 
@@ -111,25 +108,25 @@ if __name__ == '__main__':
     messages = 0
     latency_stats = None
     start = time.monotonic()
-    for _ in range(TIMES):
-        with futures.ProcessPoolExecutor(max_workers=N) as e:
-            fs = []
-            for _ in range(N):
-                fs.append(e.submit(run_test, start, DURATION))
 
-            res = futures.wait(fs)
-            for fut in res.done:
-                t_messages, t_latency_stats, t_min_latency, t_max_latency = \
-                    fut.result()
-                messages += t_messages
-                if latency_stats is None:
-                    latency_stats = t_latency_stats
-                else:
-                    latency_stats = np.add(latency_stats, t_latency_stats)
-                if t_max_latency > max_latency:
-                    max_latency = t_max_latency
-                if t_min_latency < min_latency:
-                    min_latency = t_min_latency
+    with futures.ProcessPoolExecutor(max_workers=N) as e:
+        fs = []
+        for _ in range(N):
+            fs.append(e.submit(run_test, start, DURATION))
+
+        res = futures.wait(fs)
+        for fut in res.done:
+            t_messages, t_latency_stats, t_min_latency, t_max_latency = \
+                fut.result()
+            messages += t_messages
+            if latency_stats is None:
+                latency_stats = t_latency_stats
+            else:
+                latency_stats = np.add(latency_stats, t_latency_stats)
+            if t_max_latency > max_latency:
+                max_latency = t_max_latency
+            if t_min_latency < min_latency:
+                min_latency = t_min_latency
 
     end = time.monotonic()
 

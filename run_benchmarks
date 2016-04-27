@@ -74,6 +74,12 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
+    'name': 'tcpecho-golang',
+    'title': 'TCP echo server (golang)',
+    'server': ['/usr/src/servers/goecho'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+}, {
     'name': 'tcpecho-asyncio-streams',
     'title': 'TCP echo server (asyncio/streams)',
     'server': python + ['/usr/src/servers/asyncioecho.py',
