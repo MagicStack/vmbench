@@ -33,14 +33,14 @@ class HttpResponse:
         self._headers_sent = False
 
     def write(self, data):
-        self._protocol._transport.writelines([
+        self._protocol._transport.write(b''.join([
             'HTTP/{} 200 OK\r\n'.format(
                 self._request._version).encode('latin-1'),
             b'Content-Type: text/plain\r\n',
             'Content-Length: {}\r\n'.format(len(data)).encode('latin-1'),
             b'\r\n',
             data
-        ])
+        ]))
 
 
 class HttpProtocol(asyncio.Protocol):
@@ -100,6 +100,7 @@ class HttpProtocol(asyncio.Protocol):
         else:
             payload_size = int(payload_size)
         response.write(b'X' * payload_size)
+        self._current_headers = []
 
 
 def abort(msg):
