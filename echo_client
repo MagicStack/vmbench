@@ -185,7 +185,7 @@ if __name__ == '__main__':
 {messages} {size}KiB messages in {duration} seconds
 Latency: min {latency_min}ms; max {latency_max}ms; mean {latency_mean}ms; \
 std: {latency_std}ms ({latency_cv}%)
-Latency distribtion: {latency_percentiles}
+Latency distribution: {latency_percentiles}
 Requests/sec: {rps}
 Transfer/sec: {transfer}MiB
 '''.format(duration=DURATION, size=round(MSGSIZE / 1024, 2), **data)
