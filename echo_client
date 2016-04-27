@@ -14,6 +14,28 @@ import time
 import numpy as np
 
 
+def weighted_quantile(values, quantiles, weights):
+    """ Very close to np.percentile, but supports weights.
+
+    :param values: np.array with data
+    :param quantiles: array-like with many quantiles needed,
+           quantiles should be in [0, 1]!
+    :param weights: array-like of the same length as `array`
+    :return: np.array with computed quantiles.
+    """
+    values = np.array(values)
+    quantiles = np.array(quantiles)
+    weights = np.array(weights)
+    assert np.all(quantiles >= 0) and np.all(quantiles <= 1), \
+                 'quantiles should be in [0, 1]'
+
+    weighted_quantiles = np.cumsum(weights) - 0.5 * weights
+    weighted_quantiles -= weighted_quantiles[0]
+    weighted_quantiles /= weighted_quantiles[-1]
+
+    return np.interp(quantiles, weighted_quantiles, values)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--msize', default=1000, type=int,
@@ -79,27 +101,6 @@ if __name__ == '__main__':
             n += 1
 
         return n, latency_stats, min_latency, max_latency
-
-    def weighted_quantile(values, quantiles, weights):
-        """ Very close to np.percentile, but supports weights.
-
-        :param values: np.array with data
-        :param quantiles: array-like with many quantiles needed,
-               quantiles should be in [0, 1]!
-        :param weights: array-like of the same length as `array`
-        :return: np.array with computed quantiles.
-        """
-        values = np.array(values)
-        quantiles = np.array(quantiles)
-        weights = np.array(weights)
-        assert np.all(quantiles >= 0) and np.all(quantiles <= 1), \
-                     'quantiles should be in [0, 1]'
-
-        weighted_quantiles = np.cumsum(weights) - 0.5 * weights
-        weighted_quantiles -= weighted_quantiles[0]
-        weighted_quantiles /= weighted_quantiles[-1]
-
-        return np.interp(quantiles, weighted_quantiles, values)
 
     TIMES = args.times
     N = args.concurrency

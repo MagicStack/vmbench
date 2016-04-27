@@ -27,22 +27,7 @@ server_base = ['docker', 'run', '--rm', '-t', '-p', '25000:25000',
 python = ['vex', 'bench', 'python']
 nodejs = ['nodejs']
 
-echo_variations = [{
-    'name': '1kb',
-    'title': '1kb messages, concurrency 4',
-    'args': ['--msize=1024', '--concurrency=4']
-}, {
-    'name': '10kb',
-    'title': '10kb messages, concurrency 4',
-    'args': ['--msize=10240', '--concurrency=4']
-}, {
-    'name': '100kb',
-    'title': '100kb messages, concurrency 4',
-    'args': ['--msize=102400', '--concurrency=4']
-}]
-
-echo_client = ['./echo_client', '--concurrency=4', '--output-format=json']
-echo_warmup = ['--msize=1024', '--concurrency=4', '--duration=5']
+echo_client = ['./echo_client', '--output-format=json']
 
 tcp_address = '127.0.0.1:25000'
 unix_address = 'file:{_socket}/server.sock'.format(_socket=_socket)
@@ -58,32 +43,24 @@ benchmarks = [{
     'server': python + ['/usr/src/servers/gevecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'tcpecho-tornado',
     'title': 'TCP echo server (tornado)',
     'server': python + ['/usr/src/servers/torecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'tcpecho-curio',
     'title': 'TCP echo server (curio)',
     'server': python + ['/usr/src/servers/curioecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'tcpecho-nodejs',
     'title': 'TCP echo server (nodejs)',
     'server': nodejs + ['/usr/src/servers/nodeecho.js'],
     'server_address': tcp_address,
     'client': tcp_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'tcpecho-asyncio-stdstreams',
     'title': 'TCP echo server (asyncio/stdstreams)',
@@ -92,8 +69,6 @@ benchmarks = [{
                         '--streams'],
     'server_address': tcp_address,
     'client': tcp_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'tcpecho-asyncio-minproto',
     'title': 'TCP echo server (asyncio/minproto)',
@@ -102,8 +77,6 @@ benchmarks = [{
                         '--proto'],
     'server_address': tcp_address,
     'client': tcp_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'unixecho-asyncio-stdstreams',
     'title': 'Unix socket echo server (asyncio/stdstreams)',
@@ -112,8 +85,6 @@ benchmarks = [{
                         '--streams'],
     'server_address': unix_address,
     'client': unix_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'unixecho-asyncio-minproto',
     'title': 'Unix socket echo server (asyncio/minproto)',
@@ -122,8 +93,6 @@ benchmarks = [{
                         '--proto'],
     'server_address': unix_address,
     'client': unix_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'tcpecho-uvloop-stdstreams',
     'title': 'TCP echo server (uvloop/stdstreams)',
@@ -132,8 +101,6 @@ benchmarks = [{
                         '--streams', '--uvloop'],
     'server_address': tcp_address,
     'client': tcp_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'tcpecho-uvloop-minproto',
     'title': 'TCP echo server (uvloop/minproto)',
@@ -142,8 +109,6 @@ benchmarks = [{
                         '--proto', '--uvloop'],
     'server_address': tcp_address,
     'client': tcp_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'unixecho-uvloop-stdstreams',
     'title': 'Unix socket echo server (uvloop/stdstreams)',
@@ -152,8 +117,6 @@ benchmarks = [{
                         '--streams', '--uvloop'],
     'server_address': unix_address,
     'client': unix_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }, {
     'name': 'unixecho-uvloop-minproto',
     'title': 'Unix socket echo server (uvloop/minproto)',
@@ -162,8 +125,6 @@ benchmarks = [{
                         '--proto', '--uvloop'],
     'server_address': unix_address,
     'client': unix_client,
-    'warmup': echo_warmup,
-    'variations': echo_variations,
 }]
 
 
@@ -256,6 +217,13 @@ def main():
                         help='duration of each benchmark in seconds')
     parser.add_argument('--benchmarks', type=str,
                         help='comma-separated list of benchmarks to run')
+    parser.add_argument('--concurrency-levels', type=int, default=[10],
+                        nargs='+',
+                        help='a list of concurrency levels to use')
+    parser.add_argument('--payload-size-levels', type=int, nargs='+',
+                        default=[1024, 10240, 102400],
+                        help='comma-separated list of message size levels ' +
+                             'to use (in bytes)')
     parser.add_argument('--save-json', '-J', type=str,
                         help='path to save benchmark results in JSON format')
     args = parser.parse_args()
@@ -269,6 +237,24 @@ def main():
         benchmarks_to_run = {b['name'] for b in benchmarks}
 
     benchmarks_data = []
+
+    variations = []
+
+    for concurrency in sorted(args.concurrency_levels):
+        for msgsize in sorted(args.payload_size_levels):
+            variations.append({
+                'title': '{}kb messages, concurrency {}'.format(
+                    round(msgsize / 1024, 1), concurrency
+                ),
+                'args': [
+                    '--msize={}'.format(msgsize),
+                    '--concurrency={}'.format(concurrency)
+                ]
+            })
+
+    warmup_concurrency = max(args.concurrency_levels)
+    warmup = ['--msize=1024', '--duration=5',
+              '--concurrency={}'.format(warmup_concurrency)]
 
     for benchmark in benchmarks:
         if benchmark['name'] not in benchmarks_to_run:
@@ -285,7 +271,7 @@ def main():
         print()
 
         print('Warming up server...')
-        warmup_cmd = benchmark['client'] + benchmark['warmup']
+        warmup_cmd = benchmark['client'] + warmup
         print(' '.join(warmup_cmd))
         subprocess.check_output(warmup_cmd)
         print()
@@ -300,7 +286,7 @@ def main():
         benchmarks_data.append(benchmark_data)
 
         try:
-            for variation in benchmark['variations']:
+            for variation in variations:
                 title = 'BENCHMARK: {}'.format(variation['title'])
                 print(title)
                 print('-' * len(title))
@@ -326,8 +312,6 @@ def main():
                 ''').format(duration=duration, **format_data)
 
                 print(output)
-
-                data['name'] = variation['name']
 
                 benchmark_data['variations'].append(data)
         finally:
