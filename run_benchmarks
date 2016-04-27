@@ -50,6 +50,12 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
+    'name': 'tcpecho-twisted',
+    'title': 'TCP echo server (twisted)',
+    'server': python + ['/usr/src/servers/twistedecho.py'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+}, {
     'name': 'tcpecho-curio-socket',
     'title': 'TCP echo server (curio/socket)',
     'server': python + ['/usr/src/servers/curioecho.py'],
