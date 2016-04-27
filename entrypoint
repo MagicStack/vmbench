@@ -1,15 +1,6 @@
 #!/bin/bash
 
 
-echo 'Installing packages...'
-vex bench pip --cache-dir=/var/lib/cache/pip install -r /tmp/requirements.txt
-
-mkdir -p /usr/local/repos
-cd /usr/local/repos
-git clone https://github.com/dabeaz/curio.git
-git clone https://github.com/MagicStack/uvloop.git
-cp /tmp/http_server.py uvloop/examples/bench/
-
 UID=${UID:-0}
 GID=${GID:-0}
 

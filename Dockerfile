@@ -19,9 +19,9 @@ RUN pip3 install vex
 RUN vex --python=python3.5 -m bench pip install -U pip
 RUN mkdir -p /var/lib/cache/pip
 
-ADD http_server.py /tmp/http_server.py
-ADD torecho.py /tmp/torecho.py
-ADD requirements.txt /tmp/requirements.txt
+ADD servers /usr/src/servers
+RUN vex bench pip --cache-dir=/var/lib/cache/pip \
+        install -r /usr/src/servers/requirements.txt
 
 EXPOSE 25000
 

@@ -143,7 +143,7 @@ if __name__ == '__main__':
     latency_std = math.sqrt(variance)
     latency_cv = latency_std / mean_latency
 
-    percentiles = [25, 50, 75, 90, 99]
+    percentiles = [25, 50, 75, 90, 99, 99.99]
     percentile_data = []
 
     quantiles = weighted_quantile(arange, [p / 100 for p in percentiles],

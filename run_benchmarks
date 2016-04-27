@@ -17,10 +17,6 @@ _dir = os.path.dirname(__file__)
 _cache = os.path.abspath(os.path.join(_dir, '.cache'))
 _socket = os.path.abspath(os.path.join(_dir, 'sockets'))
 
-http_client = "wrk --latency -d 30 -c 200 -t 4 http://127.0.0.1:25000/{msize}"
-
-http_server = "uvloop/examples/bench/http_server.py --addr='0.0.0.0:25000'"
-
 server_base = ['docker', 'run', '--rm', '-t', '-p', '25000:25000',
                '-e', 'UID={}'.format(os.geteuid()),
                '-e', 'GID={}'.format(os.getegid()),
@@ -54,10 +50,12 @@ unix_address = 'file:{_socket}/server.sock'.format(_socket=_socket)
 tcp_client = echo_client + ['--addr={}'.format(tcp_address)]
 unix_client = echo_client + ['--addr={}'.format(unix_address)]
 
+http_client = "wrk --latency -d 30 -c 200 -t 4 http://127.0.0.1:25000/{msize}"
+
 benchmarks = [{
     'name': 'tcpecho-gevent',
     'title': 'TCP echo server (gevent)',
-    'server': python + ['curio/examples/bench/gevecho.py'],
+    'server': python + ['/usr/src/servers/gevecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
     'warmup': echo_warmup,
@@ -65,7 +63,7 @@ benchmarks = [{
 }, {
     'name': 'tcpecho-tornado',
     'title': 'TCP echo server (tornado)',
-    'server': python + ['/tmp/torecho.py'],
+    'server': python + ['/usr/src/servers/torecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
     'warmup': echo_warmup,
@@ -73,7 +71,7 @@ benchmarks = [{
 }, {
     'name': 'tcpecho-curio',
     'title': 'TCP echo server (curio)',
-    'server': python + ['curio/examples/bench/curioecho.py'],
+    'server': python + ['/usr/src/servers/curioecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
     'warmup': echo_warmup,
@@ -81,7 +79,7 @@ benchmarks = [{
 }, {
     'name': 'tcpecho-nodejs',
     'title': 'TCP echo server (nodejs)',
-    'server': nodejs + ['curio/examples/bench/nodeecho.js'],
+    'server': nodejs + ['/usr/src/servers/nodeecho.js'],
     'server_address': tcp_address,
     'client': tcp_client,
     'warmup': echo_warmup,
@@ -89,7 +87,7 @@ benchmarks = [{
 }, {
     'name': 'tcpecho-asyncio-stdstreams',
     'title': 'TCP echo server (asyncio/stdstreams)',
-    'server': python + ['uvloop/examples/bench/server.py',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
                         '--streams'],
     'server_address': tcp_address,
@@ -99,7 +97,7 @@ benchmarks = [{
 }, {
     'name': 'tcpecho-asyncio-minproto',
     'title': 'TCP echo server (asyncio/minproto)',
-    'server': python + ['uvloop/examples/bench/server.py',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
                         '--proto'],
     'server_address': tcp_address,
@@ -109,7 +107,7 @@ benchmarks = [{
 }, {
     'name': 'unixecho-asyncio-stdstreams',
     'title': 'Unix socket echo server (asyncio/stdstreams)',
-    'server': python + ['uvloop/examples/bench/server.py',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=file:/tmp/sockets/server.sock',
                         '--streams'],
     'server_address': unix_address,
@@ -119,7 +117,7 @@ benchmarks = [{
 }, {
     'name': 'unixecho-asyncio-minproto',
     'title': 'Unix socket echo server (asyncio/minproto)',
-    'server': python + ['uvloop/examples/bench/server.py',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=file:/tmp/sockets/server.sock',
                         '--proto'],
     'server_address': unix_address,
@@ -129,7 +127,7 @@ benchmarks = [{
 }, {
     'name': 'tcpecho-uvloop-stdstreams',
     'title': 'TCP echo server (uvloop/stdstreams)',
-    'server': python + ['uvloop/examples/bench/server.py',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
                         '--streams', '--uvloop'],
     'server_address': tcp_address,
@@ -139,7 +137,7 @@ benchmarks = [{
 }, {
     'name': 'tcpecho-uvloop-minproto',
     'title': 'TCP echo server (uvloop/minproto)',
-    'server': python + ['uvloop/examples/bench/server.py',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
                         '--proto', '--uvloop'],
     'server_address': tcp_address,
@@ -149,7 +147,7 @@ benchmarks = [{
 }, {
     'name': 'unixecho-uvloop-stdstreams',
     'title': 'Unix socket echo server (uvloop/stdstreams)',
-    'server': python + ['uvloop/examples/bench/server.py',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=file:/tmp/sockets/server.sock',
                         '--streams', '--uvloop'],
     'server_address': unix_address,
@@ -159,7 +157,7 @@ benchmarks = [{
 }, {
     'name': 'unixecho-uvloop-minproto',
     'title': 'Unix socket echo server (uvloop/minproto)',
-    'server': python + ['uvloop/examples/bench/server.py',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=file:/tmp/sockets/server.sock',
                         '--proto', '--uvloop'],
     'server_address': unix_address,
@@ -258,7 +256,7 @@ def main():
                         help='duration of each benchmark in seconds')
     parser.add_argument('--benchmarks', type=str,
                         help='comma-separated list of benchmarks to run')
-    parser.add_argument('--save-json', '-J', default='text', type=str,
+    parser.add_argument('--save-json', '-J', type=str,
                         help='path to save benchmark results in JSON format')
     args = parser.parse_args()
 
@@ -321,7 +319,7 @@ def main():
 
                 output = textwrap.dedent('''\
                 {messages} messages in {duration} seconds
-                Latency: min {latency_min}ms; max {latency_max}ms; mean {latency_mean}ms; std: {latency_std}ms ({latency_cv}%)
+                Latency: min {latency_min}ms; max {latency_max}ms; mean {latency_mean}ms; std {latency_std}ms ({latency_cv}%);
                 Latency distribtion: {latency_percentiles}
                 Requests/sec: {rps}
                 Transfer/sec: {transfer}MiB
