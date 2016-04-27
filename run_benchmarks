@@ -34,8 +34,8 @@ unix_address = 'file:{_socket}/server.sock'.format(_socket=_socket)
 
 tcp_client = echo_client + ['--addr={}'.format(tcp_address)]
 unix_client = echo_client + ['--addr={}'.format(unix_address)]
-
-http_client = "wrk --latency -d 30 -c 200 -t 4 http://127.0.0.1:25000/{msize}"
+http_client = ['./http_client', '--output-format=json',
+               '--addr={}'.format(tcp_address)]
 
 benchmarks = [{
     'name': 'tcpecho-gevent',
@@ -143,6 +143,38 @@ benchmarks = [{
                         '--streams', '--uvloop'],
     'server_address': unix_address,
     'client': unix_client,
+}, {
+    'name': 'http-asyncio-aiohttp',
+    'title': 'HTTP server (asyncio/aiohttp)',
+    'server': python + ['/usr/src/servers/asyncio_http_server.py',
+                        '--type=asyncio+aiohttp',
+                        '--addr=0.0.0.0:25000'],
+    'server_address': tcp_address,
+    'client': http_client,
+}, {
+    'name': 'http-asyncio-httptools',
+    'title': 'HTTP server (asyncio/httptools)',
+    'server': python + ['/usr/src/servers/asyncio_http_server.py',
+                        '--type=asyncio+httptools',
+                        '--addr=0.0.0.0:25000'],
+    'server_address': tcp_address,
+    'client': http_client,
+}, {
+    'name': 'http-uvloop-aiohttp',
+    'title': 'HTTP server (uvloop/aiohttp)',
+    'server': python + ['/usr/src/servers/asyncio_http_server.py',
+                        '--type=uvloop+aiohttp',
+                        '--addr=0.0.0.0:25000'],
+    'server_address': tcp_address,
+    'client': http_client,
+}, {
+    'name': 'http-uvloop-httptools',
+    'title': 'HTTP server (uvloop/httptools)',
+    'server': python + ['/usr/src/servers/asyncio_http_server.py',
+                        '--type=uvloop+httptools',
+                        '--addr=0.0.0.0:25000'],
+    'server_address': tcp_address,
+    'client': http_client,
 }]
 
 
@@ -175,7 +207,7 @@ def start_and_wait_for_server(server_cmd, address, timeout=60):
         sock.settimeout(time.monotonic() - start)
         try:
             sock.connect(addr)
-            sock.sendall(b'ping')
+            sock.sendall(b'GET / HTTP/1.0\r\n\r\n')
             if sock.recv(4):
                 print('Server is up and running.')
             else:

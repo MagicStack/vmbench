@@ -5,6 +5,7 @@ import aiohttp.server
 from aiohttp import web
 import sys
 
+import httptools
 import uvloop
 
 from socket import *
@@ -32,9 +33,6 @@ class HttpResponse:
         self._headers_sent = False
 
     def write(self, data):
-        if isinstance(data, str):
-            data = data.encode()
-
         self._protocol._transport.writelines([
             'HTTP/{} 200 OK\r\n'.format(
                 self._request._version).encode('latin-1'),
@@ -43,9 +41,6 @@ class HttpResponse:
             b'\r\n',
             data
         ])
-
-
-RESP = b'Hello World' * 512
 
 
 class HttpProtocol(asyncio.Protocol):
@@ -83,6 +78,8 @@ class HttpProtocol(asyncio.Protocol):
 
     def connection_made(self, transport):
         self._transport = transport
+        sock = transport.get_extra_info('socket')
+        sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
 
     def connection_lost(self, exc):
         self._current_request = self._current_parser = None
@@ -96,7 +93,13 @@ class HttpProtocol(asyncio.Protocol):
         self._current_parser.feed_data(data)
 
     def handle(self, request, response):
-        response.write(RESP)
+        parsed_url = httptools.parse_url(self._current_url)
+        payload_size = parsed_url.path.decode('ascii')[1:]
+        if not payload_size:
+            payload_size = 1024
+        else:
+            payload_size = int(payload_size)
+        response.write(b'X' * payload_size)
 
 
 def abort(msg):
@@ -105,17 +108,21 @@ def abort(msg):
 
 
 def aiohttp_server(loop, addr):
-    PAYLOAD = b'<h1>Hello, World!</h1>'
-
     async def handle(request):
-        return web.Response(body=PAYLOAD)
+        payload_size = int(request.match_info.get('size', 1024))
+        return web.Response(body=b'X' * payload_size)
 
     app = web.Application(loop=loop)
+    app.router.add_route('GET', '/{size}', handle)
     app.router.add_route('GET', '/', handle)
     handler = app.make_handler()
     server = loop.create_server(handler, *addr)
 
     return server
+
+
+def httptools_server(loop, addr):
+    return loop.create_server(lambda: HttpProtocol(loop=loop), *addr)
 
 
 if __name__ == '__main__':
@@ -132,7 +139,7 @@ if __name__ == '__main__':
         else:
             server_type = args.type
 
-        if server_type == 'aiohttp':
+        if server_type in {'aiohttp', 'httptools'}:
             if not loop_type:
                 loop_type = 'asyncio'
         else:
