@@ -264,6 +264,8 @@ def main():
                 'title': '{}kb messages, concurrency {}'.format(
                     round(msgsize / 1024, 1), concurrency
                 ),
+                'concurrency': concurrency,
+                'payload_size': msgsize,
                 'args': [
                     '--msize={}'.format(msgsize),
                     '--concurrency={}'.format(concurrency)
@@ -338,6 +340,12 @@ def main():
         print()
 
     if args.save_json:
+        benchmarks_data = {
+            'concurrency_levels': args.concurrency_levels,
+            'payload_size_levels': args.payload_size_levels,
+            'benchmarks': benchmarks_data,
+        }
+
         with open(args.save_json, 'w') as f:
             json.dump(benchmarks_data, f)
 
