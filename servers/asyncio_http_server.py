@@ -100,7 +100,8 @@ class HttpProtocol(asyncio.Protocol):
         else:
             payload_size = int(payload_size)
         response.write(b'X' * payload_size)
-        self._current_headers = []
+        self._current_parser = None
+        self._current_request = None
 
 
 def abort(msg):

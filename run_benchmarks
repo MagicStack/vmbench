@@ -175,6 +175,12 @@ benchmarks = [{
                         '--addr=0.0.0.0:25000'],
     'server_address': tcp_address,
     'client': http_client,
+}, {
+    'name': 'http-nodejs',
+    'title': 'HTTP server (nodejs)',
+    'server': nodejs + ['/usr/src/servers/nodejs_http_server.js'],
+    'server_address': tcp_address,
+    'client': http_client,
 }]
 
 
