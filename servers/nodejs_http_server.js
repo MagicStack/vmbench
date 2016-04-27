@@ -2,6 +2,7 @@ var http = require('http');
 
 
 const PORT = 25000;
+var responses = {};
 
 
 function handle(request, response) {
@@ -11,10 +12,15 @@ function handle(request, response) {
     } else {
         msize = parseInt(msize);
     }
-    response.end(Array(msize).join("X"));
+    if (!responses[msize]) {
+        responses[msize] = Array(msize).join("X");
+    }
+    response.end(responses[msize]);
 }
 
 
 var server = http.createServer(handle);
 
-server.listen(PORT, function() {});
+server.listen(PORT, function() {
+    console.log('Serving on ::' + PORT.toString());
+});
