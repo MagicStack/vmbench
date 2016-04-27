@@ -3,7 +3,6 @@ import asyncio
 import gc
 import uvloop
 import os.path
-import socket as socket_module
 
 from socket import *
 
@@ -33,7 +32,7 @@ async def echo_server(loop, address, unix):
 async def echo_client(loop, client):
     with client:
         while True:
-            data = await loop.sock_recv(client, 10000)
+            data = await loop.sock_recv(client, 102400)
             if not data:
                 break
             await loop.sock_sendall(client, data)
@@ -46,7 +45,7 @@ async def echo_client_streams(reader, writer):
         sock = writer.get_extra_info('socket')
         print('Connection from', sock.getpeername())
     while True:
-         data = await reader.read(100000)
+         data = await reader.read(102400)
          if not data:
              break
          writer.write(data)
