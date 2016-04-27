@@ -21,7 +21,7 @@ RUN vex --python=python3.5 -m bench pip install -U pip
 RUN mkdir -p /var/lib/cache/pip
 
 ADD servers /usr/src/servers
-RUN go build /usr/src/servers/goecho.go
+RUN cd /usr/src/servers && go build goecho.go
 RUN vex bench pip --cache-dir=/var/lib/cache/pip \
         install -r /usr/src/servers/requirements.txt
 
