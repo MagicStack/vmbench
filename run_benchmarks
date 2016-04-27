@@ -56,6 +56,12 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
+    'name': 'tcpecho-curio-streams',
+    'title': 'TCP echo server (curio/streams)',
+    'server': python + ['/usr/src/servers/curioecho_streams.py'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+}, {
     'name': 'tcpecho-nodejs',
     'title': 'TCP echo server (nodejs)',
     'server': nodejs + ['/usr/src/servers/nodeecho.js'],
