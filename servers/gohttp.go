@@ -1,10 +1,10 @@
 package main
 
 import (
+    "bytes"
     "fmt"
     "net/http"
     "strconv"
-    "strings"
 
     "github.com/golang/groupcache/lru"
 )
@@ -12,7 +12,7 @@ import (
 var cache *lru.Cache
 
 func handler(w http.ResponseWriter, r *http.Request) {
-    var resp string
+    var resp []byte
 
     respSize := r.URL.Path[1:]
     s, err := strconv.Atoi(respSize)
@@ -22,13 +22,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
     val, ok := cache.Get(s)
     if ok {
-        resp = val.(string)
+        resp = val.([]byte)
     } else {
-        resp = strings.Repeat("X", s)
+        resp = bytes.Repeat([]byte{'X'}, s)
         cache.Add(s, resp)
     }
 
-    fmt.Fprintf(w, resp)
+    w.Write(resp)
 }
 
 func main() {
