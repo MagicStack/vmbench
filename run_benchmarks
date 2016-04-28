@@ -181,6 +181,12 @@ benchmarks = [{
     'server': nodejs + ['/usr/src/servers/nodejs_http_server.js'],
     'server_address': tcp_address,
     'client': http_client,
+}, {
+    'name': 'http-golang',
+    'title': 'HTTP server (golang)',
+    'server': ['/usr/src/servers/gohttp'],
+    'server_address': tcp_address,
+    'client': http_client,
 }]
 
 

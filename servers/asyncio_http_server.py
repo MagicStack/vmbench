@@ -13,6 +13,7 @@ from socket import *
 
 PRINT = 0
 
+_RESP_CACHE = {}
 
 class HttpRequest:
     __slots__ = ('_protocol', '_url', '_headers', '_version')
@@ -99,7 +100,11 @@ class HttpProtocol(asyncio.Protocol):
             payload_size = 1024
         else:
             payload_size = int(payload_size)
-        response.write(b'X' * payload_size)
+        resp = _RESP_CACHE.get(payload_size)
+        if resp is None:
+            resp = b'X' * payload_size
+            _RESP_CACHE[payload_size] = resp
+        response.write(resp)
         self._current_parser = None
         self._current_request = None
 
@@ -112,7 +117,12 @@ def abort(msg):
 def aiohttp_server(loop, addr):
     async def handle(request):
         payload_size = int(request.match_info.get('size', 1024))
-        return web.Response(body=b'X' * payload_size)
+        resp = _RESP_CACHE.get(payload_size)
+        if resp is None:
+            resp = b'X' * payload_size
+            _RESP_CACHE[payload_size] = resp
+        response.write(resp)
+        return web.Response(body=resp)
 
     app = web.Application(loop=loop)
     app.router.add_route('GET', '/{size}', handle)
