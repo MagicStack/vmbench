@@ -388,7 +388,13 @@ def main():
         print()
 
     if args.save_json:
+        info_cmd = server_base + python + ['/usr/src/servers/platinfo.py']
+        print('  ' + ' '.join(info_cmd))
+        output = subprocess.check_output(info_cmd, universal_newlines=True)
+        platform_info = json.loads(output)
+
         benchmarks_data = {
+            'platform': platform_info,
             'concurrency_levels': args.concurrency_levels,
             'payload_size_levels': args.payload_size_levels,
             'benchmarks': benchmarks_data,
