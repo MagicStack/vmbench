@@ -224,6 +224,7 @@ def start_and_wait_for_server(server_cmd, address, timeout=60):
                       '----------------------\n' +
                       '\n\n'.join(server.communicate()))
         else:
+            sock.shutdown(socket.SHUT_RDWR)
             sock.close()
             return server
 
