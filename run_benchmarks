@@ -2,11 +2,14 @@
 
 
 import argparse
+import collections
+import datetime
 import json
 import os
 import os.path
 import re
 import socket
+import string
 import subprocess
 import sys
 import textwrap
@@ -275,6 +278,140 @@ def kill_server():
         subprocess.check_output(['docker', 'rm', 'magicbench'])
 
 
+def format_report(data, target_file):
+    tpl_path = os.path.join(os.path.dirname(__file__), 'report', 'report.html')
+
+    with open(tpl_path, 'r') as f:
+        tpl = string.Template(f.read())
+
+    now = datetime.datetime.now()
+    date = now.strftime('%c')
+    platform = '{system} ({dist}, {arch}) on {cpu}'.format(
+        system=data['platform']['system'],
+        dist=data['platform']['distribution'],
+        arch=data['platform']['arch'],
+        cpu=data['platform']['cpu'],
+    )
+
+    i = 0
+
+    entries = collections.OrderedDict()
+    btypes = []
+
+    for benchmark in data['benchmarks']:
+        entry = {}
+
+        bench = benchmark['name'].split('-')
+        btype = bench[0]
+        if btype not in btypes:
+            btypes.append(btype)
+
+        bname = ' '.join(bench[1:])
+
+        try:
+            entry = entries[bname]
+        except KeyError:
+            entry = entries[bname] = {
+                'name': bname,
+                'benchmarks': collections.OrderedDict()
+            }
+
+        try:
+            brecords = entry['benchmarks'][btype]
+        except KeyError:
+            brecords = entry['benchmarks'][btype] = collections.OrderedDict((
+                ('Requests/sec', []),
+                ('Transfer/sec', []),
+                ('Min latency', []),
+                ('Mean latency', []),
+                ('Max latency', []),
+                ('Latency variation', []),
+            ))
+
+        variations = benchmark['variations']
+        i = 0
+
+        for concurrency in data['concurrency_levels']:
+            for msgsize in data['payload_size_levels']:
+                variation = variations[i]
+                i += 1
+
+                brecords['Requests/sec'].append(
+                    variation['rps'])
+                brecords['Transfer/sec'].append(
+                    '{}MiB'.format(variation['transfer']))
+                brecords['Min latency'].append(
+                    '{}ms'.format(variation['latency_min']))
+                brecords['Mean latency'].append(
+                    '{}ms'.format(variation['latency_mean']))
+                brecords['Max latency'].append(
+                    '{}ms'.format(variation['latency_max']))
+                brecords['Latency variation'].append('{}ms ({}%)'.format(
+                    variation['latency_std'], variation['latency_cv']))
+
+    vc = len(data['concurrency_levels']) * len(data['payload_size_levels'])
+
+    btypes_html = '\n'.join(['<th colspan="{span}">{btype}</th>'.format(
+                                span=vc, btype=bt) for bt in btypes])
+
+    variations_th = []
+    for bt in btypes:
+        for concurrency in data['concurrency_levels']:
+            for msgsize in data['payload_size_levels']:
+                variations_th.append(
+                    '<th>{}</th>'.format(
+                        '{}KiB, c {}'.format(msgsize / 1024, concurrency)
+                    )
+                )
+
+    record_trs = []
+    for bname, entry in entries.items():
+        record_trs.append(
+            '''<tr class="benchmark">
+                <td>{name}</td>
+                {empty_tds}
+            </tr>'''.format(name=bname, empty_tds='<td></td>' * vc)
+        )
+
+        for bt in btypes:
+            for metric, metric_data in entry['benchmarks'][bt].items():
+                record_trs.append(
+                    '<tr class="metric"><td>{metric}</td>{data}</tr>'.format(
+                        metric=metric,
+                        data='\n'.join('<td>{}</td>'.format(v)
+                                       for v in metric_data)
+                    )
+                )
+
+    table = '''
+        <table class="results">
+            <thead>
+                <tr>
+                    <th rowspan="2"></th>
+                    {btypes}
+                </tr>
+                <tr>
+                    {variations_header}
+                </tr>
+            </thead>
+            <tbody>
+                {records}
+            </tbody>
+        </table>
+    '''.format(btypes=btypes_html, variations_header='\n'.join(variations_th),
+               records='\n'.join(record_trs))
+
+    output = tpl.safe_substitute(
+        __BENCHMARK_DATE__=date,
+        __BENCHMARK_PLATFORM__=platform,
+        __BENCHMARK_DATA_TABLE__=table,
+        __BENCHMARK_DATA_JSON__=json.dumps(data)
+    )
+
+    with open(target_file, 'wt') as f:
+        f.write(output)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--duration', '-D', default=30, type=int,
@@ -291,6 +428,8 @@ def main():
                              'to use (in bytes)')
     parser.add_argument('--save-json', '-J', type=str,
                         help='path to save benchmark results in JSON format')
+    parser.add_argument('--save-html', '-H', type=str,
+                        help='path to save benchmark results in HTML format')
     args = parser.parse_args()
 
     if not os.path.exists(_socket):
@@ -387,21 +526,27 @@ def main():
 
         print()
 
-    if args.save_json:
+    if args.save_json or args.save_html:
         info_cmd = server_base + python + ['/usr/src/servers/platinfo.py']
         print('  ' + ' '.join(info_cmd))
         output = subprocess.check_output(info_cmd, universal_newlines=True)
         platform_info = json.loads(output)
 
         benchmarks_data = {
+            'date': '%Y-%m-%dT%H:%M:%S%z',
+            'duration': args.duration,
             'platform': platform_info,
             'concurrency_levels': args.concurrency_levels,
             'payload_size_levels': args.payload_size_levels,
             'benchmarks': benchmarks_data,
         }
 
+    if args.save_json:
         with open(args.save_json, 'w') as f:
             json.dump(benchmarks_data, f)
+
+    if args.save_html:
+        format_report(benchmarks_data, args.save_html)
 
 
 if __name__ == '__main__':

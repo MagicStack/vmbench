@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.1.1/normalize.min.css" />
+<script src="https://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+
+<style>
+    body {
+        padding: 20px;
+    }
+    .axis path, .axis line {
+        fill: none;
+        stroke: #999;
+        shape-rendering: crispEdges;
+    }
+    .axis.x2 path, .axis.x2 line {
+        display: none;
+    }
+    .axis text {
+        font: 12px sans-serif;
+        fill: #333;
+    }
+    .axis.x path {
+        display: none;
+    }
+
+    .axis text {
+        fill: #555;
+    }
+    .axis line, .axis path {
+        stroke: #888;
+    }
+
+    .focus line {
+        stroke: #900;
+    }
+    .focus text {
+        fill: #900;
+        font: 12px sans-serif;
+    }
+    table.results {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    table.results td, table.results th {
+        border: 1px solid #999;
+        padding: 5px;
+    }
+    table.results tr.benchmark td {
+        font-weight: bold;
+        border-bottom: none;
+        text-align: center;
+    }
+    table.results tr.metric td {
+        border-top: none;
+        border-bottom: none;
+        text-align: right;
+    }
+    table.results tr.metric:last-child td {
+        border-bottom: 1px solid #999;
+    }
+</style>
+</head>
+
+<body>
+
+<p><em>${__BENCHMARK_DATE__}</em></p>
+
+<h1>Server Performance Benchmark Report</h1>
+
+Below are the results of testing network server implementations.  Each server
+is constrained to run in a single process.
+
+Test environment: ${__BENCHMARK_PLATFORM__}.
+
+<h2>Results</h2>
+
+<svg id="bars"></svg>
+<svg id="lats"></svg>
+
+<h2>Detailed Benchmark Data</h2>
+
+${__BENCHMARK_DATA_TABLE__}
+
+<script>
+function drawBars(elSelector, data, options) {'use strict';
+options = options || {};
+
+// geometry
+
+var margin = {top: 10, right: 0, bottom: 40, left: 65},
+    width = (options.width || 1000) - margin.left - margin.right,
+    height = (options.height || 370) - margin.top - margin.bottom;
+
+// data reshape
+
+var maxRps = 0;
+data.benchmarks.forEach(function(bench) {
+    bench.variations.forEach(function(v) {
+        if (v.rps > maxRps) {
+            maxRps = v.rps
+        }
+    })
+});
+var sizes = data.payload_size_levels;
+var names = data.benchmarks.map(function(d) { return d.name });
+
+// charting
+
+var color = d3.scale.ordinal()
+            .range(["#98abc5", "#6b486b", "#ff8c00"]);
+
+var x0 = d3.scale.ordinal()
+            .rangeRoundBands([0, width], .2)
+            .domain(names);
+
+var x1 = d3.scale.ordinal();
+x1.domain(sizes).rangeRoundBands([0, x0.rangeBand()], .2);
+
+var y = d3.scale.linear()
+            .range([height, 0])
+            .domain([0, maxRps]);
+
+var xAxis = d3.svg.axis()
+            .scale(x0)
+            .orient("bottom")
+            .tickFormat(function(d) { return d.split('-')[1] });
+var xAxis2 = d3.svg.axis()
+            .scale(x0)
+            .orient("bottom")
+            .tickFormat(function(d) { return d.split('-')[2] });
+
+var yAxis = d3.svg.axis()
+            .scale(y)
+            .orient("left");
+
+var chart = d3.select(elSelector)
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .append("g")
+                .attr("transform",
+                    "translate(" + margin.left + "," + margin.top + ")");
+chart.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + height + ")")
+            .call(xAxis);
+
+chart.append("g")
+            .attr("class", "x axis x2")
+            .attr("transform", "translate(0," + (height + 14) + ")")
+            .call(xAxis2);
+
+chart.append("g")
+            .attr("class", "y axis")
+            .call(yAxis)
+            .append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 6)
+                .attr("dy", ".71em")
+                .style("text-anchor", "end")
+                .text("Requests / sec");
+
+var bench = chart.selectAll(".bench")
+            .data(data.benchmarks)
+            .enter().append("g")
+                .attr("class", "bench")
+                .attr("transform", function(d) {
+                    return "translate(" + x0(d.name) + ",0)";
+                });
+
+bench.selectAll("rect")
+            .data(function(d) { return d.variations; })
+            .enter().append("rect")
+                .attr("width", x1.rangeBand())
+                .attr("x", function(d, i) { return x1(sizes[i]); })
+                .attr("y", function(d) { return y(d.rps); })
+                .attr("height", function(d) { return height - y(d.rps); })
+                .style("fill", function(d, i) { return color(sizes[i]); })
+                .on("mouseover", function(d, i) {
+                    focusRect
+                        .attr('y', y(d.rps) - 9);
+
+                    focusLine
+                        .attr('y1', y(d.rps))
+                        .attr('y2', y(d.rps));
+
+                    focusText
+                        .attr('y', y(d.rps))
+                        .text(d3.format("0,000")(Math.round(d.rps)));
+
+                    focus.style("display", null);
+                })
+                .on("mouseout", function() { focus.style("display", 'none'); });
+
+var focus = chart.append('g')
+            .attr('class', 'focus')
+            .style('display', 'none');
+var focusRect = focus.append('rect')
+            .attr('x', -margin.left)
+            .attr('width', margin.left - 6)
+            .attr('y', 0)
+            .attr('height', 18)
+            .attr('fill', 'rgba(255, 255, 255, 0.9)');
+var focusLine = focus.append('line')
+            .attr('x1', -6)
+            .attr('x2', width - 20)
+            .attr('y1', 0)
+            .attr('y2', 0)
+            .style("stroke-dasharray", "2,2");
+var focusText = focus.append('text')
+            .attr('y', 0)
+            .attr('x', -9)
+            .attr('text-anchor', 'end')
+            .attr('alignment-baseline', 'middle');
+};
+
+
+function drawLats(elSelector, data) {'use strict';
+options = options || {};
+
+// geometry
+
+var margin = {top: 10, right: 0, bottom: 40, left: 65},
+    width = (options.width || 1000) - margin.left - margin.right,
+    height = (options.height || 370) - margin.top - margin.bottom;
+
+// data reshape
+
+var maxLat = 0;
+data.benchmarks.forEach(function(bench) {
+    bench.variations.forEach(function(v) {
+        if (v.latency_percentiles[4][1] > maxLat) {
+            maxLat = v.latency_percentiles[4][1];
+        }
+    })
+});
+
+var sizes = data.payload_size_levels;
+var names = data.benchmarks.map(function(d) { return d.name });
+
+// charting
+
+var color = d3.scale.ordinal()
+            .range(["#98abc5", "#6b486b", "#ff8c00"]);
+
+var x0 = d3.scale.ordinal()
+            .rangeRoundBands([0, width], .2)
+            .domain(names);
+
+var x1 = d3.scale.ordinal();
+x1.domain(sizes).rangeRoundBands([0, x0.rangeBand()], 0.3);
+
+var y = d3.scale.linear()
+            .range([height, 0])
+            .domain([0, maxLat]);
+
+var xAxis = d3.svg.axis()
+            .scale(x0)
+            .orient("bottom")
+            .tickFormat(function(d) { return d.split('-')[1] });
+var xAxis2 = d3.svg.axis()
+            .scale(x0)
+            .orient("bottom")
+            .tickFormat(function(d) { return d.split('-')[2] });
+
+
+var yAxis = d3.svg.axis()
+            .scale(y)
+            .orient("left");
+
+var chart = d3.select(elSelector)
+            .attr('width', width + margin.left + margin.right)
+            .attr('height', height + margin.top + margin.bottom)
+            .append("g")
+                .attr("transform",
+                    "translate(" + margin.left + "," + margin.top + ")");
+
+chart.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + height + ")")
+            .call(xAxis);
+
+chart.append("g")
+            .attr("class", "x axis x2")
+            .attr("transform", "translate(0," + (height + 14) + ")")
+            .call(xAxis2);
+
+chart.append("g")
+            .attr("class", "y axis")
+            .call(yAxis)
+            .append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 6)
+                .attr("dy", ".71em")
+                .style("text-anchor", "end")
+                .text("Latency (msec)");
+
+var bench = chart.selectAll(".bench")
+            .data(data.benchmarks)
+            .enter().append("g")
+                .attr("class", "bench")
+                .attr("transform", function(d) {
+                    return "translate(" + x0(d.name) + ",0)";
+                });
+
+var g = bench.selectAll("rect")
+            .data(function(d) { return d.variations; })
+            .enter().append("g")
+                .attr('class', 'sub');
+
+g.append('line')
+            .attr('y1', function(d) { return y(d.latency_percentiles[4][1]); })
+            .attr('y2', function(d) { return y(d.latency_percentiles[4][1]); })
+            .attr('x1', function(d, i) { return x1(sizes[i]); })
+            .attr('x2', function(d, i) { return x1(sizes[i]) + x1.rangeBand(); })
+            .style("stroke", function(d, i) { return color(sizes[i]); });
+
+g.append('line')
+            .attr('y1', function(d) { return y(d.latency_min); })
+            .attr('y2', function(d) { return y(d.latency_min); })
+            .attr('x1', function(d, i) { return x1(sizes[i]); })
+            .attr('x2', function(d, i) { return x1(sizes[i]) + x1.rangeBand(); })
+            .style("stroke", function(d, i) { return color(sizes[i]); });
+
+g.append('line')
+            .attr('y1', function(d) { return y(d.latency_percentiles[1][1]); })
+            .attr('y2', function(d) { return y(d.latency_percentiles[1][1]); })
+            .attr('x1', function(d, i) { return x1(sizes[i]); })
+            .attr('x2', function(d, i) { return x1(sizes[i]) + x1.rangeBand(); })
+            .style("stroke", function(d, i) { return color(sizes[i]); });
+
+g.append('line')
+            .attr('y1', function(d) { return y(d.latency_min); })
+            .attr('y2', function(d) { return y(d.latency_percentiles[0][1]) })
+            .attr('x1', function(d, i) { return x1(sizes[i]) + x1.rangeBand() / 2; })
+            .attr('x2', function(d, i) { return x1(sizes[i]) + x1.rangeBand() / 2; })
+            .style("stroke", function(d, i) { return color(sizes[i]); })
+            .style("stroke-dasharray", "2,2");
+
+g.append('line')
+            .attr('y1', function(d) { return y(d.latency_percentiles[4][1]); })
+            .attr('y2', function(d) { return y(d.latency_percentiles[2][1]) })
+            .attr('x1', function(d, i) { return x1(sizes[i]) + x1.rangeBand() / 2; })
+            .attr('x2', function(d, i) { return x1(sizes[i]) + x1.rangeBand() / 2; })
+            .style("stroke", function(d, i) { return color(sizes[i]); })
+            .style("stroke-dasharray", "2,2");
+
+g.append('rect')
+            .attr('y', function(d) { return y(d.latency_percentiles[2][1]); })
+            .attr('x', function(d, i) { return x1(sizes[i]); })
+            .attr("width", x1.rangeBand())
+            .attr('height', function(d) { return Math.abs(y(d.latency_percentiles[2][1]) - y(d.latency_percentiles[0][1])) })
+            .style("stroke", function(d, i) { return color(sizes[i]); })
+            .style("fill", 'rgba(0, 0, 0, 0)');
+
+g.append('rect')
+            .attr('y', 0)
+            .attr('height', height)
+            .attr('x', function(d, i) { return x1(sizes[i]); })
+            .attr('width', function(d) { return x1.rangeBand(); })
+            .style('fill', 'rgba(0, 0, 0, 0)')
+            .on("mouseout", function(d, i) {
+                d3.select(this).style('fill', 'rgba(0, 0, 0, 0)');
+                focus.style('display', 'none');
+            })
+            .on("mouseover", function(d, i) {
+                d3.select(this).style('fill', 'rgba(0, 0, 0, 0.04)');
+
+                var yMedian = y(d.latency_percentiles[1][1]);
+
+                focus
+                    .style('display', null);
+
+                focusLine
+                    .attr('y1', yMedian)
+                    .attr('y2', yMedian);
+
+                    focusRect
+                        .attr('y', yMedian - 9);
+
+                    focusLine
+                        .attr('y1', yMedian)
+                        .attr('y2', yMedian);
+
+                    focusText
+                        .attr('y', yMedian)
+                        .text(d3.format(".2f")(d.latency_percentiles[1][1]));
+
+            });
+
+var focus = chart.append('g')
+            .attr('class', 'focus')
+            .style('display', 'none');
+var focusRect = focus.append('rect')
+            .attr('x', -margin.left)
+            .attr('width', margin.left - 6)
+            .attr('y', 0)
+            .attr('height', 18)
+            .attr('fill', 'rgba(255, 255, 255, 0.9)');
+var focusLine = focus.append('line')
+            .attr('x1', -6)
+            .attr('x2', width - 20)
+            .attr('y1', 0)
+            .attr('y2', 0)
+            .style("stroke-dasharray", "2,2");
+var focusText = focus.append('text')
+            .attr('y', 0)
+            .attr('x', -9)
+            .attr('text-anchor', 'end')
+            .attr('alignment-baseline', 'middle');
+};
+
+
+var data = ${__BENCHMARK_DATA_JSON__};
+
+var tcpData = {
+    payload_size_levels: data.payload_size_levels,
+    benchmarks: data.benchmarks
+}
+
+function _total_rps(entry) {
+    var total = 0;
+    for (var i = 0; i < entry.variations.length; i+=1) {
+        total += entry.variations[i].rps;
+    }
+    return total;
+}
+
+tcpData.benchmarks.sort(function(e1, e2) {
+    return d3.ascending(_total_rps(e1), _total_rps(e2));
+})
+
+options = {
+    width: 800,
+    height: 300
+}
+
+drawBars('#bars', tcpData, options);
+drawLats('#lats', tcpData, options);
+
+
+</script>
+
+</body>
+
+</html>
