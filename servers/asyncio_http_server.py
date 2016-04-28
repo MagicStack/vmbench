@@ -121,7 +121,6 @@ def aiohttp_server(loop, addr):
         if resp is None:
             resp = b'X' * payload_size
             _RESP_CACHE[payload_size] = resp
-        response.write(resp)
         return web.Response(body=resp)
 
     app = web.Application(loop=loop)
