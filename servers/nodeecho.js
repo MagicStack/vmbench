@@ -5,6 +5,7 @@
 
 var net = require('net');
 net.createServer(function(socket){
+    socket.setNoDelay();
     socket.on('data', function(data){
         socket.write(data)
     });

@@ -1,8 +1,12 @@
 from curio import Kernel, new_task, run_server
-
+from socket import *
 
 async def echo_handler(client, addr):
     print('Connection from', addr)
+    try:
+        client.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+    except (OSError, NameError):
+        pass
     reader, writer = client.make_streams()
     async with reader, writer:
         while True:

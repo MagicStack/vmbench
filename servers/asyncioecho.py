@@ -30,6 +30,11 @@ async def echo_server(loop, address, unix):
 
 
 async def echo_client(loop, client):
+    try:
+        sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+    except (OSError, NameError):
+        pass
+
     with client:
         while True:
             data = await loop.sock_recv(client, 102400)
@@ -41,8 +46,12 @@ async def echo_client(loop, client):
 
 
 async def echo_client_streams(reader, writer):
+    sock = writer.get_extra_info('socket')
+    try:
+        sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+    except (OSError, NameError):
+        pass
     if PRINT:
-        sock = writer.get_extra_info('socket')
         print('Connection from', sock.getpeername())
     while True:
          data = await reader.read(102400)
@@ -57,6 +66,11 @@ async def echo_client_streams(reader, writer):
 class EchoProtocol(asyncio.Protocol):
     def connection_made(self, transport):
         self.transport = transport
+        sock = transport.get_extra_info('socket')
+        try:
+            sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+        except (OSError, NameError):
+            pass
 
     def connection_lost(self, exc):
         self.transport = None

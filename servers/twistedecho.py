@@ -8,6 +8,9 @@ from twisted.internet import reactor, protocol
 class Echo(protocol.Protocol):
     """This is just about the simplest possible protocol"""
 
+    def connectionMade(self):
+         self.transport.setTcpNoDelay(True)
+
     def dataReceived(self, data):
         "As soon as any data is received, write it back."
         self.transport.write(data)

@@ -5,6 +5,7 @@ from tornado.tcpserver import TCPServer
 class StreamHandler:
     def __init__(self, stream):
         self._stream = stream
+        stream.set_nodelay(True)
         self._stream.read_until_close(None, self._handle_read)
 
     def _handle_read(self, data):
