@@ -17,7 +17,7 @@
     .axis.x2 path, .axis.x2 line {
         display: none;
     }
-    .axis text {
+    .axis text, .legend text {
         font: 12px sans-serif;
         fill: #333;
     }
@@ -76,27 +76,81 @@ Test environment: ${__BENCHMARK_PLATFORM__}.
 
 <h2>Results</h2>
 
-<svg id="bars"></svg>
-<svg id="lats"></svg>
+<svg id="bars" style="width: 80vw"></svg>
+<svg id="lats" style="width: 80vw"></svg>
 
 <h2>Detailed Benchmark Data</h2>
 
 ${__BENCHMARK_DATA_TABLE__}
 
 <script>
+var DEFAULT_COLORS = [
+    "#98abc5", "#6b486b", "#ff8c00", "#8a89a6", "#7b6888", "#a05d56", "#d0743c"
+];
+
+function _humanFileSize(bytes, si) {
+    var thresh = si ? 1000 : 1024;
+    if(Math.abs(bytes) < thresh) {
+        return bytes + ' B';
+    }
+    var units = si
+        ? ['kB','MB','GB','TB','PB','EB','ZB','YB']
+        : ['KiB','MiB','GiB','TiB','PiB','EiB','ZiB','YiB'];
+    var u = -1;
+    do {
+        bytes /= thresh;
+        ++u;
+    } while(Math.abs(bytes) >= thresh && u < units.length - 1);
+    return bytes.toFixed(0)+' '+units[u];
+}
+
+function _drawLegend(chart, width, sizes) {
+    var legend = chart.selectAll('legend')
+            .data(sizes)
+            .enter()
+                .append("g")
+                    .attr('class', 'legend')
+                    .attr("transform", "translate(" + width + ", 20)");
+    legend.append('circle')
+                .style('fill', function(d, i) { return DEFAULT_COLORS[i] })
+                .attr('cx', 0)
+                .attr('cy', function(d, i) { return i * 20 })
+                .attr('r', 5);
+    legend.append('text')
+                .attr('x', 7)
+                .attr('y', function(d, i) { return i * 20 })
+                .attr('alignment-baseline', 'central')
+                .text(function(d) { return _humanFileSize(d, false)});
+}
+
+function _copyAndSortBenchmarks(benchmarks) {
+    var newBench = [];
+    Array.prototype.push.apply(newBench, benchmarks);
+    newBench.sort(function(e1, e2) {
+        return d3.ascending(e1.variations.reduce(function(s, el) {
+                                return s+el.rps }, 0),
+                            e2.variations.reduce(function(s, el) {
+                                return s+el.rps }, 0));
+    })
+    return newBench
+}
+
 function drawBars(elSelector, data, options) {'use strict';
 options = options || {};
 
 // geometry
 
-var margin = {top: 10, right: 0, bottom: 40, left: 65},
-    width = (options.width || 1000) - margin.left - margin.right,
-    height = (options.height || 370) - margin.top - margin.bottom;
+var fullWidth = (options.width || 1000),
+    fullHeight = (options.height || 370),
+    margin = {top: 10, right: 65, bottom: 55, left: 65},
+    width = fullWidth - margin.left - margin.right,
+    height = fullHeight - margin.top - margin.bottom,
+    benchmarks = _copyAndSortBenchmarks(data.benchmarks);
 
 // data reshape
 
 var maxRps = 0;
-data.benchmarks.forEach(function(bench) {
+benchmarks.forEach(function(bench) {
     bench.variations.forEach(function(v) {
         if (v.rps > maxRps) {
             maxRps = v.rps
@@ -104,12 +158,12 @@ data.benchmarks.forEach(function(bench) {
     })
 });
 var sizes = data.payload_size_levels;
-var names = data.benchmarks.map(function(d) { return d.name });
+var names = benchmarks.map(function(d) { return d.name });
 
 // charting
 
 var color = d3.scale.ordinal()
-            .range(["#98abc5", "#6b486b", "#ff8c00"]);
+            .range(DEFAULT_COLORS);
 
 var x0 = d3.scale.ordinal()
             .rangeRoundBands([0, width], .2)
@@ -125,8 +179,12 @@ var y = d3.scale.linear()
 var xAxis = d3.svg.axis()
             .scale(x0)
             .orient("bottom")
-            .tickFormat(function(d) { return d.split('-')[1] });
+            .tickFormat(function(d) { return d.split('-')[0] });
 var xAxis2 = d3.svg.axis()
+            .scale(x0)
+            .orient("bottom")
+            .tickFormat(function(d) { return d.split('-')[1] });
+var xAxis3 = d3.svg.axis()
             .scale(x0)
             .orient("bottom")
             .tickFormat(function(d) { return d.split('-')[2] });
@@ -136,20 +194,27 @@ var yAxis = d3.svg.axis()
             .orient("left");
 
 var chart = d3.select(elSelector)
-            .attr('width', width + margin.left + margin.right)
-            .attr('height', height + margin.top + margin.bottom)
+            .attr('viewBox', '0 0 ' + fullWidth + ' ' + fullHeight)
             .append("g")
                 .attr("transform",
                     "translate(" + margin.left + "," + margin.top + ")");
+
 chart.append("g")
             .attr("class", "x axis")
             .attr("transform", "translate(0," + height + ")")
-            .call(xAxis);
+            .call(options.showBenchmarkType ? xAxis : xAxis2);
 
 chart.append("g")
             .attr("class", "x axis x2")
             .attr("transform", "translate(0," + (height + 14) + ")")
-            .call(xAxis2);
+            .call(options.showBenchmarkType ? xAxis2 : xAxis3);
+
+if (options.showBenchmarkType) {
+    chart.append("g")
+                .attr("class", "x axis x2")
+                .attr("transform", "translate(0," + (height + 28) + ")")
+                .call(xAxis3);
+}
 
 chart.append("g")
             .attr("class", "y axis")
@@ -161,8 +226,10 @@ chart.append("g")
                 .style("text-anchor", "end")
                 .text("Requests / sec");
 
+_drawLegend(chart, width, sizes);
+
 var bench = chart.selectAll(".bench")
-            .data(data.benchmarks)
+            .data(benchmarks)
             .enter().append("g")
                 .attr("class", "bench")
                 .attr("transform", function(d) {
@@ -221,14 +288,17 @@ options = options || {};
 
 // geometry
 
-var margin = {top: 10, right: 0, bottom: 40, left: 65},
-    width = (options.width || 1000) - margin.left - margin.right,
-    height = (options.height || 370) - margin.top - margin.bottom;
+var fullWidth = (options.width || 1000),
+    fullHeight = (options.height || 370),
+    margin = {top: 10, right: 65, bottom: 55, left: 65},
+    width = fullWidth - margin.left - margin.right,
+    height = fullHeight - margin.top - margin.bottom,
+    benchmarks = _copyAndSortBenchmarks(data.benchmarks);
 
 // data reshape
 
 var maxLat = 0;
-data.benchmarks.forEach(function(bench) {
+benchmarks.forEach(function(bench) {
     bench.variations.forEach(function(v) {
         if (v.latency_percentiles[4][1] > maxLat) {
             maxLat = v.latency_percentiles[4][1];
@@ -237,12 +307,12 @@ data.benchmarks.forEach(function(bench) {
 });
 
 var sizes = data.payload_size_levels;
-var names = data.benchmarks.map(function(d) { return d.name });
+var names = benchmarks.map(function(d) { return d.name });
 
 // charting
 
 var color = d3.scale.ordinal()
-            .range(["#98abc5", "#6b486b", "#ff8c00"]);
+            .range(DEFAULT_COLORS);
 
 var x0 = d3.scale.ordinal()
             .rangeRoundBands([0, width], .2)
@@ -258,8 +328,12 @@ var y = d3.scale.linear()
 var xAxis = d3.svg.axis()
             .scale(x0)
             .orient("bottom")
-            .tickFormat(function(d) { return d.split('-')[1] });
+            .tickFormat(function(d) { return d.split('-')[0] });
 var xAxis2 = d3.svg.axis()
+            .scale(x0)
+            .orient("bottom")
+            .tickFormat(function(d) { return d.split('-')[1] });
+var xAxis3 = d3.svg.axis()
             .scale(x0)
             .orient("bottom")
             .tickFormat(function(d) { return d.split('-')[2] });
@@ -270,8 +344,7 @@ var yAxis = d3.svg.axis()
             .orient("left");
 
 var chart = d3.select(elSelector)
-            .attr('width', width + margin.left + margin.right)
-            .attr('height', height + margin.top + margin.bottom)
+            .attr('viewBox', '0 0 ' + fullWidth + ' ' + fullHeight)
             .append("g")
                 .attr("transform",
                     "translate(" + margin.left + "," + margin.top + ")");
@@ -279,12 +352,19 @@ var chart = d3.select(elSelector)
 chart.append("g")
             .attr("class", "x axis")
             .attr("transform", "translate(0," + height + ")")
-            .call(xAxis);
+            .call(options.showBenchmarkType ? xAxis : xAxis2);
 
 chart.append("g")
             .attr("class", "x axis x2")
             .attr("transform", "translate(0," + (height + 14) + ")")
-            .call(xAxis2);
+            .call(options.showBenchmarkType ? xAxis2 : xAxis3);
+
+if (options.showBenchmarkType) {
+    chart.append("g")
+                .attr("class", "x axis x2")
+                .attr("transform", "translate(0," + (height + 28) + ")")
+                .call(xAxis3);
+}
 
 chart.append("g")
             .attr("class", "y axis")
@@ -296,8 +376,10 @@ chart.append("g")
                 .style("text-anchor", "end")
                 .text("Latency (msec)");
 
+_drawLegend(chart, width, sizes);
+
 var bench = chart.selectAll(".bench")
-            .data(data.benchmarks)
+            .data(benchmarks)
             .enter().append("g")
                 .attr("class", "bench")
                 .attr("transform", function(d) {
@@ -411,7 +493,6 @@ var focusText = focus.append('text')
             .attr('alignment-baseline', 'middle');
 };
 
-
 var data = ${__BENCHMARK_DATA_JSON__};
 
 var tcpData = {
@@ -419,27 +500,14 @@ var tcpData = {
     benchmarks: data.benchmarks
 }
 
-function _total_rps(entry) {
-    var total = 0;
-    for (var i = 0; i < entry.variations.length; i+=1) {
-        total += entry.variations[i].rps;
-    }
-    return total;
-}
-
-tcpData.benchmarks.sort(function(e1, e2) {
-    return d3.ascending(_total_rps(e1), _total_rps(e2));
-})
-
 options = {
     width: 800,
-    height: 300
+    height: 300,
+    showBenchmarkType: true
 }
 
 drawBars('#bars', tcpData, options);
 drawLats('#lats', tcpData, options);
-
-
 </script>
 
 </body>
