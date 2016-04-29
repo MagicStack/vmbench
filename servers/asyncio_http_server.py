@@ -80,7 +80,10 @@ class HttpProtocol(asyncio.Protocol):
     def connection_made(self, transport):
         self._transport = transport
         sock = transport.get_extra_info('socket')
-        sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+        try:
+            sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+        except (OSError, NameError):
+            pass
 
     def connection_lost(self, exc):
         self._current_request = self._current_parser = None
