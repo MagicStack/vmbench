@@ -108,6 +108,8 @@ class HttpProtocol(asyncio.Protocol):
             resp = b'X' * payload_size
             _RESP_CACHE[payload_size] = resp
         response.write(resp)
+        if not self._current_parser.should_keep_alive():
+            self._transport.close()
         self._current_parser = None
         self._current_request = None
 
