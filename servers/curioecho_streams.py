@@ -10,7 +10,7 @@ async def echo_handler(client, addr):
     reader, writer = client.make_streams()
     async with reader, writer:
         while True:
-            data = await reader.read()
+            data = await reader.read(102400)
             if not data:
                 break
             await writer.write(data)
