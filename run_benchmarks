@@ -460,7 +460,7 @@ def main():
             })
 
     warmup_concurrency = max(args.concurrency_levels)
-    warmup = ['--msize=1024', '--duration=5',
+    warmup = ['--msize=1024', '--duration=10',
               '--concurrency={}'.format(warmup_concurrency)]
 
     for benchmark in benchmarks:
