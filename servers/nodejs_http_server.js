@@ -10,10 +10,13 @@ function handle(request, response) {
     if (!msize) {
         msize = 1024;
     } else {
-        msize = parseInt(msize);
+        msize = parseInt(msize, 10);
     }
     if (!responses[msize]) {
-        responses[msize] = Array(msize).join("X");
+	// for Node.js v4
+	responses[msize] = new Buffer(msize).fill("X");
+	// for Node.js v6
+	// responses[msize] = Buffer.alloc(msize, "X");
     }
     response.end(responses[msize]);
 }
