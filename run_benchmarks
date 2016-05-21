@@ -100,6 +100,13 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
+    'name': 'tcpecho-asyncio-sockets',
+    'title': 'TCP echo server (asyncio/sockets)',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
+                        '--addr=0.0.0.0:25000'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+}, {
     'name': 'unixecho-asyncio',
     'title': 'Unix socket echo server (asyncio)',
     'server': python + ['/usr/src/servers/asyncioecho.py',
@@ -129,6 +136,14 @@ benchmarks = [{
     'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
                         '--streams', '--uvloop'],
+    'server_address': tcp_address,
+    'client': tcp_client,
+}, {
+    'name': 'tcpecho-uvloop-sockets',
+    'title': 'TCP echo server (uvloop/sockets)',
+    'server': python + ['/usr/src/servers/asyncioecho.py',
+                        '--addr=0.0.0.0:25000',
+                        '--uvloop'],
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
