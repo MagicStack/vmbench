@@ -42,25 +42,25 @@ http_client = ['./http_client', '--output-format=json',
                '--addr={}'.format(tcp_address)]
 
 benchmarks = [{
-    'name': 'tcpecho-gevent',
+    'name': 'tcpecho-gevent-sockets',
     'title': 'TCP echo server (gevent)',
     'server': python + ['/usr/src/servers/gevecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-tornado',
+    'name': 'tcpecho-tornado-protocol',
     'title': 'TCP echo server (tornado)',
     'server': python + ['/usr/src/servers/torecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-twisted',
+    'name': 'tcpecho-twisted-protocol',
     'title': 'TCP echo server (twisted)',
     'server': python + ['/usr/src/servers/twistedecho.py'],
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-curio',
+    'name': 'tcpecho-curio-sockets',
     'title': 'TCP echo server (curio)',
     'server': python + ['/usr/src/servers/curioecho.py'],
     'server_address': tcp_address,
@@ -72,19 +72,19 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-nodejs',
+    'name': 'tcpecho-nodejs-streams',
     'title': 'TCP echo server (nodejs)',
     'server': nodejs + ['/usr/src/servers/nodeecho.js'],
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-golang',
+    'name': 'tcpecho-golang-sockets',
     'title': 'TCP echo server (golang)',
     'server': ['/usr/src/servers/goecho'],
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-asyncio',
+    'name': 'tcpecho-asyncio-protocol',
     'title': 'TCP echo server (asyncio)',
     'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
@@ -107,7 +107,7 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'unixecho-asyncio',
+    'name': 'unixecho-asyncio-protocol',
     'title': 'Unix socket echo server (asyncio)',
     'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=file:/tmp/sockets/server.sock',
@@ -123,7 +123,7 @@ benchmarks = [{
     'server_address': unix_address,
     'client': unix_client,
 }, {
-    'name': 'tcpecho-uvloop',
+    'name': 'tcpecho-uvloop-protocol',
     'title': 'TCP echo server (uvloop)',
     'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
@@ -147,7 +147,7 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'unixecho-uvloop',
+    'name': 'unixecho-uvloop-protocol',
     'title': 'Unix socket echo server (uvloop)',
     'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=file:/tmp/sockets/server.sock',
