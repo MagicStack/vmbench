@@ -40,6 +40,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--msize', default=1000, type=int,
                         help='message size in bytes')
+    parser.add_argument('--mpr', default=1, type=int,
+                        help='messages per request')
     parser.add_argument('--duration', '-T', default=30, type=int,
                         help='duration of test in seconds')
     parser.add_argument('--concurrency', default=3, type=int,
@@ -62,8 +64,9 @@ if __name__ == '__main__':
         addr = tuple(addr)
 
     MSGSIZE = args.msize
+    msg = (b'x' * (MSGSIZE - 1) + b'\n') * args.mpr
 
-    msg = b'x' * MSGSIZE
+    REQSIZE = MSGSIZE * args.mpr
 
     timeout = args.timeout * 1000
 
@@ -85,8 +88,8 @@ if __name__ == '__main__':
             req_start = time.monotonic()
             sock.sendall(msg)
             nrecv = 0
-            while nrecv < MSGSIZE:
-                resp = sock.recv(MSGSIZE)
+            while nrecv < REQSIZE:
+                resp = sock.recv(REQSIZE)
                 if not resp:
                     raise SystemExit()
                 nrecv += len(resp)
@@ -97,6 +100,11 @@ if __name__ == '__main__':
                 min_latency = req_time
             latency_stats[req_time] += 1
             n += 1
+
+        try:
+            sock.close()
+        except OSError:
+            pass
 
         return n, latency_stats, min_latency, max_latency
 

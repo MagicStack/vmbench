@@ -54,7 +54,7 @@ async def echo_client_streams(reader, writer):
     if PRINT:
         print('Connection from', sock.getpeername())
     while True:
-         data = await reader.read(102400)
+         data = await reader.readline()
          if not data:
              break
          writer.write(data)
@@ -133,10 +133,12 @@ if __name__ == '__main__':
         print('using asyncio/streams')
         if unix:
             coro = asyncio.start_unix_server(echo_client_streams,
-                                             addr, loop=loop)
+                                             addr, loop=loop,
+                                             limit=1024 * 1024)
         else:
             coro = asyncio.start_server(echo_client_streams,
-                                        *addr, loop=loop)
+                                        *addr, loop=loop,
+                                        limit=1024 * 1024)
         srv = loop.run_until_complete(coro)
     elif args.proto:
         if args.streams:

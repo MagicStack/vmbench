@@ -40,6 +40,7 @@ tcp_client = echo_client + ['--addr={}'.format(tcp_address)]
 unix_client = echo_client + ['--addr={}'.format(unix_address)]
 http_client = ['./http_client', '--output-format=json',
                '--addr={}'.format(tcp_address)]
+readline_client = tcp_client + ['--mpr=5']
 
 benchmarks = [{
     'name': 'tcpecho-gevent-sockets',
@@ -54,6 +55,12 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
+    'name': 'readline-tornado',
+    'title': 'Streams readline (tornado)',
+    'server': python + ['/usr/src/servers/torecho_readline.py'],
+    'server_address': tcp_address,
+    'client': readline_client,
+}, {
     'name': 'tcpecho-twisted-protocol',
     'title': 'TCP echo server (twisted)',
     'server': python + ['/usr/src/servers/twistedecho.py'],
@@ -66,11 +73,11 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-curio-streams',
-    'title': 'TCP echo server (curio/streams)',
+    'name': 'readline-curio',
+    'title': 'Streams readline (curio)',
     'server': python + ['/usr/src/servers/curioecho_streams.py'],
     'server_address': tcp_address,
-    'client': tcp_client,
+    'client': readline_client,
 }, {
     'name': 'tcpecho-nodejs-streams',
     'title': 'TCP echo server (nodejs)',
@@ -92,13 +99,13 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-asyncio-streams',
-    'title': 'TCP echo server (asyncio/streams)',
+    'name': 'readline-asyncio',
+    'title': 'Streams readline (asyncio)',
     'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
                         '--streams'],
     'server_address': tcp_address,
-    'client': tcp_client,
+    'client': readline_client,
 }, {
     'name': 'tcpecho-asyncio-sockets',
     'title': 'TCP echo server (asyncio/sockets)',
@@ -131,13 +138,13 @@ benchmarks = [{
     'server_address': tcp_address,
     'client': tcp_client,
 }, {
-    'name': 'tcpecho-uvloop-streams',
-    'title': 'TCP echo server (uvloop/streams)',
+    'name': 'readline-uvloop',
+    'title': 'Streams readline (uvloop)',
     'server': python + ['/usr/src/servers/asyncioecho.py',
                         '--addr=0.0.0.0:25000',
                         '--streams', '--uvloop'],
     'server_address': tcp_address,
-    'client': tcp_client,
+    'client': readline_client,
 }, {
     'name': 'tcpecho-uvloop-sockets',
     'title': 'TCP echo server (uvloop/sockets)',
