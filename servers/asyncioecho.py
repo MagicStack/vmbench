@@ -31,7 +31,7 @@ async def echo_server(loop, address, unix):
 
 async def echo_client(loop, client):
     try:
-        sock.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+        client.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
     except (OSError, NameError):
         pass
 
