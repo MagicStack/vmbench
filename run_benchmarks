@@ -279,7 +279,7 @@ def server_is_running():
         return False
 
     else:
-        return ret == 'true\n'
+        return "true" in ret
 
 
 def server_container_exists():

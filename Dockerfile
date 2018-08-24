@@ -1,4 +1,4 @@
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 MAINTAINER elvis@magic.io
 
 RUN DEBIAN_FRONTEND=noninteractive \
@@ -19,7 +19,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
             python3 python3-pip git nodejs golang gosu
 
 RUN pip3 install vex
-RUN vex --python=python3.5 -m bench pip install -U pip
+RUN vex --python=python3 -m bench pip install -U pip
 RUN mkdir -p /var/lib/cache/pip
 
 ADD servers /usr/src/servers

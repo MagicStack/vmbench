@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import aiohttp
-import aiohttp.server
 from aiohttp import web
 import sys
 
