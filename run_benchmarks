@@ -221,12 +221,13 @@ def abort(msg):
     sys.exit(1)
 
 
-def start_and_wait_for_server(server_cmd, address, timeout=60):
+def start_and_wait_for_server(server_cmd, address, timeout, docker_wait):
     kill_server()
 
     server = subprocess.Popen(server_cmd, universal_newlines=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+    time.sleep(docker_wait)
     start = time.monotonic()
 
     if address.startswith('file:'):
@@ -452,6 +453,15 @@ def main():
                         help='path to save benchmark results in JSON format')
     parser.add_argument('--save-html', '-H', type=str,
                         help='path to save benchmark results in HTML format')
+    parser.add_argument('--docker-timeout', type=int, default=60,
+                        help='The amount of time to wait before considering ' +
+                             'the docker container unconnectable')
+    parser.add_argument('--docker-wait', type=int, default=0,
+                        help='The amount of time to wait for the docker ' +
+                             'container to start before testing the ' +
+                             'connection. Useful for when the webserver ' +
+                             'running in docker takes a little bit of ' +
+                             'time to start.')
     args = parser.parse_args()
 
     if not os.path.exists(_socket):
@@ -496,7 +506,9 @@ def main():
         print('Starting server...')
         server_cmd = server_base + benchmark['server']
         print('  ' + ' '.join(server_cmd))
-        start_and_wait_for_server(server_cmd, benchmark['server_address'])
+        start_and_wait_for_server(server_cmd, benchmark['server_address'],
+                                  timeout=args.docker_timeout,
+                                  docker_wait=args.docker_wait)
         print()
 
         print('Warming up server...')
